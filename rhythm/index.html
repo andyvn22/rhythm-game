@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width"/>
+	<title>Rhythm Game</title>
+</head>
+<body>
+	<style>
+		@font-face {
+			font-family: "Rhythms";
+			src: url("media/Rhythms.otf");
+		}
+		
+		*,
+		*:before,
+		*:after {
+			-webkit-box-sizing: border-box;
+			-moz-box-sizing: border-box;
+			box-sizing: border-box;
+		}
+		
+		html, body {
+			min-height: 100%;
+		}
+		
+		#staff {
+			font-family: "Rhythms";
+			font-size: 8em;
+			padding-right: 100%;
+			overflow: scroll;
+			white-space: nowrap;
+			
+			/*user-select: none;
+			-webkit-user-select: none;
+			cursor: default;*/
+		}
+		
+		.timeSignature {
+			position: relative;
+			/*top: 0.13em;*/
+		}
+		
+		.barline {
+			position: relative;
+			/*top: 0.13em;*/
+		}
+		
+		.rest {
+			position: relative;
+			/*top: -0.35em;*/
+		}
+		
+		.test {
+			color: blue;
+			text-decoration: none;
+		}
+		
+		.test:hover {
+			color: red;
+		}
+	</style>
+	<script src="include/jquery-1.12.2.min.js"></script>
+	<script src="include/jquery-ui.min.js"></script>
+	<script src="include/ion.sound.min.js"></script>
+	<script src="music.js"></script>
+	<script>
+		"use strict";
+		
+		let player = new Player();
+		
+		$(document).ready(function() {
+			ion.sound({
+				sounds: [
+					{ name: "metronome", volume: 0.8 },
+					{ name: "1" },
+					{ name: "2" },
+					{ name: "3" },
+					{ name: "4" },
+					{ name: "5" },
+					{ name: "6" },
+					{ name: "7" },
+					{ name: "8" },
+					{ name: "9" },
+					{ name: "10" },
+					{ name: "rea-" },
+					{ name: "-dy" },
+					{ name: "go" }
+				],
+				volume: 0.8,
+				path: "media/sounds/",
+				preload: true,
+				multiplay: true
+			});
+		});
+		
+		function displayPiece() {
+			document.getElementById("staff").innerHTML = player.piece.toNotation();
+		};
+		
+		function playPiece() {
+			player.play();
+		};
+		
+		function clap() {
+			player.gradeClap();
+		};
+		
+		function writeSixEightTest() {
+			const dq = new Note(4, 1);
+			const sixEight = new TimeSignature(2, dq);
+			player.piece = new Piece(sixEight, [
+				new Note(4),
+				new Note(8),
+				new Note(8),
+				new Note(16),
+				new Note(16),
+				new Note(8),
+				new Note(8),
+				new Note(4),
+				new Note(4, 1)
+			]);
+			
+			displayPiece();
+		};
+		
+		function writeFiveFourTest() {
+			const fiveFour = new TimeSignature(5, new Note(4));
+			player.piece = new Piece(fiveFour, [
+				new Note(8),
+				new Note(4),
+				new Note(8),
+				new Note(16),
+				new Note(16),
+				new Note(8),
+				new Note(8,1),
+				new Note(16),
+				new Note(16),
+				new Note(8),
+				new Note(16)
+			]);
+			
+			displayPiece();
+		};
+	</script>
+	<h1>Rhythm Game</h1>
+	<div id="staff">
+		
+	</div>
+	<button onclick="writeSixEightTest();">Write 6/8 Test Piece!</button>
+	<button onclick="writeFiveFourTest();">Write 5/4 Test Piece!</button>
+	<button onclick="playPiece();">Play This Piece!</button>
+	
+	<button onclick="clap();">Clap</button>
+</body>
+</html>

@@ -1,0 +1,18 @@
+JGSW:
++ Display notation on an HTML page
++ Display notation on an HTML page on someone's computer that doesn't have the Bravura Text font installed
++ Display a time signature object
++ Display note objects
++ Bar automatically
++ Beam automatically
++ Play the rhythm
++ Scroll to where you are as it plays. I think there is a jQuery `scrollTop` property?
++ Count off before playing
+- Accept input & grade!!
+- I'm very concerned about spacing. :( Do you need to make a custom font?
+- Rests
+
+POLISH:
+- Make grading hues quadratic instead of linear: it should be easier to get perfect greens.
+- Get permission to host the Rhythms font for this project, or make your own
+- Overlapping beams bother Safari--you've fixed this for inner notes with a hack to do a complete redraw each play, but you need to redraw at the end of a piece, too.
