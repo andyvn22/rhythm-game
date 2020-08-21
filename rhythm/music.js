@@ -14,7 +14,7 @@ function assert(condition, message = "Assertion failed") {
 
 Note.dotCharacter = ".";
 
-function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "metronome") {
+function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "metronome", clapAttempts = []) {
 	assert(typeof type === "number");
 	assert(type === 1 || type === 2 || type === 4 || type === 8 || type === 16);
 	assert(typeof dots === "number");
@@ -92,6 +92,68 @@ function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "met
 			}
 		}
 	});
+	
+	let clapTimingSort = function(a,b) {
+		if (Math.abs(a) < Math.abs(b)) { return -1; }
+		else if (Math.abs(a) > Math.abs(b)) { return 1; }
+		else { return 0; }
+	};
+	
+	this._clapAttempts = clapAttempts;
+	Object.defineProperty(this, "bestClapTiming", {
+		get() {
+			if (this._clapAttempts.length == 0) { return null; }
+			return this._clapAttempts[0];
+		}
+	});
+	Object.defineProperty(this, "extraClaps", {
+		get() {
+			return this._clapAttempts.slice(1);
+		}
+	});
+	this.addClap = function(offset) {
+		this._clapAttempts.push(offset);
+		this._clapAttempts.sort(clapTimingSort);
+	};
+	this.removeEarliestClap = function() {
+		if (this._clapAttempts.length == 0) { return null; }
+		
+		let indexOfEarliestClap = 0;
+		for (let i = 1; i < this._clapAttempts.length; i++) {
+			if (this._clapAttempts[i] < this._clapAttempts[indexOfEarliestClap]) {
+				indexOfEarliestClap = i;
+			}
+		}
+		
+		const result = this._clapAttempts[indexOfEarliestClap];
+		this._clapAttempts.splice(indexOfEarliestClap, 1);
+		return result;
+	};
+	this.removeAllClaps = function() {
+		this._clapAttempts = [];
+	};
+	this.updateClapsWithID = function(noteID) {
+		const noteElement = document.getElementById(noteID);
+		
+		if (this.bestClapTiming === null) {
+			$(noteElement).css("color","black");
+		} else {
+			const threshold = 200;
+			const correctness = Math.max(1 - (Math.abs(this.bestClapTiming) / threshold), 0);
+			
+			const hue = correctness * 125; //125°==green, 0°==red
+			$(noteElement).css("color","hsl(" + hue + ",80%,40%)");
+			//$(noteElement).animate({ color: "hsl(" + hue + ",80%,40%)" }, "slow"); //jQuery can't animate HSL??
+			
+			const extraClapClass = noteID + "-extraClap";
+			$(noteElement.parentNode).children("." + extraClapClass).remove();
+			if (this.extraClaps.length > 0) {
+				for (let extraClap of this.extraClaps) {
+					$(noteElement).after('<div class="extraClap ' + extraClapClass + '" style="left: ' + noteElement.offsetLeft + 'px;">Extra clap!<br/>❗️</div>');
+				}
+			}
+		}
+	};
 	
 	this.relativeLength = function(other) {
 		return this.absoluteLength / other.absoluteLength;
@@ -321,7 +383,7 @@ function Piece(timeSignature, notes) {
 		return result;
 	};
 	
-	this.idForNote = function(noteIndex) {
+	this.idForNoteIndex = function(noteIndex) {
 		assert(typeof noteIndex === "number");
 		assert(noteIndex >= 0);
 		return this.pieceID + "-note" + noteIndex;
@@ -373,7 +435,7 @@ function Piece(timeSignature, notes) {
 				}
 			}
 			
-			result += '<span id="' + this.idForNote(i) + '">';
+			result += '<span id="' + this.idForNoteIndex(i) + '">';
 			result += note.toNotation(beamsIn, beamsOut);
 			if (beamsIn == 0 && beamsOut == 0) {
 				result += this.appropriateSpaces(note);
@@ -384,6 +446,13 @@ function Piece(timeSignature, notes) {
 			previousBeams = beamsOut;
 		}
 		return result + Piece.finalBarlineCharacter;
+	};
+	
+	this.removeAllClaps = function() {
+		for (let i = 0; i < this.notes.length; i++) {
+			this.notes[i].removeAllClaps();
+			this.notes[i].updateClapsWithID(this.idForNoteIndex(i));
+		}
 	};
 }
 
@@ -428,7 +497,7 @@ function Player(piece = null, tempo = 90) {
 	
 	this.play = function() {
 		if (this.isPlaying) { return; }
-		const parentElement = document.getElementById(this.piece.idForNote(0)).parentNode;
+		const parentElement = document.getElementById(this.piece.idForNoteIndex(0)).parentNode;
 		parentElement.scrollLeft = 0;
 		
 		this._isPlaying = true;
@@ -456,7 +525,7 @@ function Player(piece = null, tempo = 90) {
 		
 		let noteElement = null;
 		if (!this.isCountingOff) {
-			noteElement = document.getElementById(this.piece.idForNote(this._nextNote));
+			noteElement = document.getElementById(this.piece.idForNoteIndex(this._nextNote));
 			//$(noteElement).css("color","red");
 			//$(noteElement).animate({ color: "black" }, "slow");
 			
@@ -467,7 +536,7 @@ function Player(piece = null, tempo = 90) {
 		this._nextNote += 1;
 		
 		if (this._nextNote > 0 && this._nextNote < this.piece.notes.length) {
-			const nextNoteElement = document.getElementById(this.piece.idForNote(this._nextNote));
+			const nextNoteElement = document.getElementById(this.piece.idForNoteIndex(this._nextNote));
 			const scrollMargin = 80;
 			let newScrollPosition;
 			if (nextNoteElement === null) {
@@ -490,25 +559,27 @@ function Player(piece = null, tempo = 90) {
 			return Math.abs(clapTime - noteTime);
 		};
 		
-		const nextDistance = this._nextNote == this.piece.notes.length ? Infinity : Math.abs(clapTime - this._nextNoteTime);
-		const previousDistance = this._nextNote == 0 ? Infinity : Math.abs(clapTime - (this._nextNoteTime - this.piece.notes[this._nextNote-1].toMilliseconds(this.piece.timeSignature, this.tempo)));
+		const offsetToNextNote = this._nextNote == this.piece.notes.length ? Infinity : clapTime - this._nextNoteTime;
+		const offsetToPreviousNote = this._nextNote == 0 ? Infinity : clapTime - (this._nextNoteTime - this.piece.notes[this._nextNote-1].toMilliseconds(this.piece.timeSignature, this.tempo));
 		
-		let closestNote;
-		let distance;
-		if (nextDistance < previousDistance) {
+		let closestNote, offset;
+		if (Math.abs(offsetToNextNote) < Math.abs(offsetToPreviousNote)) {
 			closestNote = this._nextNote;
-			distance = nextDistance;
+			offset = offsetToNextNote;
 		} else {
 			closestNote = this._nextNote - 1;
-			distance = previousDistance;
+			offset = offsetToPreviousNote;
 		}
 		
-		const threshold = 200;
-		const correctness = Math.max(1 - (distance / threshold), 0);
-		
-		const hue = correctness * 125; //125°==green, 0°==red
-		const noteElement = document.getElementById(this.piece.idForNote(closestNote));
-		$(noteElement).css("color","hsl(" + hue + ",80%,40%)");
-		//$(noteElement).animate({ color: "hsl(" + hue + ",80%,40%)" }, "slow"); //jQuery can't animate HSL??
+		if (closestNote > 0) {
+			const previousNoteHasNoClap = this.piece.notes[closestNote - 1].bestClapTiming === null;
+			const thisNoteAlreadyHasClap = this.piece.notes[closestNote].bestClapTiming !== null;
+			if (previousNoteHasNoClap && thisNoteAlreadyHasClap) {
+				this.piece.notes[closestNote - 1].addClap(this.piece.notes[closestNote].removeEarliestClap());
+				this.piece.notes[closestNote - 1].updateClapsWithID(this.piece.idForNoteIndex(closestNote - 1));
+			}
+		}
+		this.piece.notes[closestNote].addClap(offset);
+		this.piece.notes[closestNote].updateClapsWithID(this.piece.idForNoteIndex(closestNote));
 	};
 }

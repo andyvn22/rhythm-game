@@ -8,11 +8,19 @@ JGSW:
 + Play the rhythm
 + Scroll to where you are as it plays. I think there is a jQuery `scrollTop` property?
 + Count off before playing
-- Accept input & grade!!
-- I'm very concerned about spacing. :( Do you need to make a custom font?
++ Accept input & grade!!
+- Store offset info in fractions of a beat, so that you can...
+- add tooltips for details on timing!
+- Space extra clap markings according to offset
+- Refactor because it's getting ugly and weird.
+- Random level generation, based on some parameters to allow for practice of specific skills.
+- Lots of interface work! Big button? Space bar? Tapping on phones?
 - Rests
+- Abstract level tree you can progress through
+- Accounts saved on server based on hash of email; switching accounts on main page
 
 POLISH:
 - Make grading hues quadratic instead of linear: it should be easier to get perfect greens.
 - Get permission to host the Rhythms font for this project, or make your own
-- Overlapping beams bother Safari--you've fixed this for inner notes with a hack to do a complete redraw each play, but you need to redraw at the end of a piece, too.
+	- I'm concerned about spacing. :( You might need to make a custom font.
+- Overlapping beams bother Safari--you've fixed this for inner notes with a hack to do a complete redraw each play, but you need to redraw at the end of a piece, too, and when claps are cleared for a re-try.

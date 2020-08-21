@@ -30,25 +30,20 @@
 			padding-right: 100%;
 			overflow: scroll;
 			white-space: nowrap;
+			position: relative;
 			
 			/*user-select: none;
 			-webkit-user-select: none;
 			cursor: default;*/
 		}
 		
-		.timeSignature {
-			position: relative;
-			/*top: 0.13em;*/
-		}
-		
-		.barline {
-			position: relative;
-			/*top: 0.13em;*/
-		}
-		
-		.rest {
-			position: relative;
-			/*top: -0.35em;*/
+		.extraClap {
+			position: absolute;
+			font-size: 0.1em;
+			font-family: Helvetica, sans-serif;
+			color: red;
+			top: 1em;
+			text-align: center;
 		}
 		
 		.test {
@@ -99,6 +94,7 @@
 		};
 		
 		function playPiece() {
+			player.piece.removeAllClaps();
 			player.play();
 		};
 		
