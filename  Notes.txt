@@ -9,8 +9,10 @@ JGSW:
 + Scroll to where you are as it plays. I think there is a jQuery `scrollTop` property?
 + Count off before playing
 + Accept input & grade!!
-- Store offset info in fractions of a beat, so that you can...
-- add tooltips for details on timing!
++ Store offset info in fractions of a beat, so that you can...
++ create formatters for counts, and
++ add tooltips for details on timing!
+- Make Count a real type to clean up
 - Space extra clap markings according to offset
 - Refactor because it's getting ugly and weird.
 - Random level generation, based on some parameters to allow for practice of specific skills.
@@ -24,3 +26,8 @@ POLISH:
 - Get permission to host the Rhythms font for this project, or make your own
 	- I'm concerned about spacing. :( You might need to make a custom font.
 - Overlapping beams bother Safari--you've fixed this for inner notes with a hack to do a complete redraw each play, but you need to redraw at the end of a piece, too, and when claps are cleared for a re-try.
+
+EXAMPLE TOOLTIP:
+• This note is on the ma of 2
+• You clapped on the ta of 3
+• You were 2/3 of a beat late

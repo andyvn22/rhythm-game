@@ -13,6 +13,7 @@ function assert(condition, message = "Assertion failed") {
 //Note
 
 Note.dotCharacter = ".";
+Note.timingThreshold = 200; //in milliseconds, so we have higher standards at slower tempos
 
 function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "metronome", clapAttempts = []) {
 	assert(typeof type === "number");
@@ -93,6 +94,16 @@ function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "met
 		}
 	});
 	
+	Object.defineProperty(this, "timing", {
+		value: null,
+		writable: true
+	});
+	
+	Object.defineProperty(this, "ungraded", {
+		value: true,
+		writable: true
+	});
+	
 	let clapTimingSort = function(a,b) {
 		if (Math.abs(a) < Math.abs(b)) { return -1; }
 		else if (Math.abs(a) > Math.abs(b)) { return 1; }
@@ -108,6 +119,7 @@ function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "met
 	});
 	Object.defineProperty(this, "extraClaps", {
 		get() {
+			if (this._clapAttempts.length == 0) { return new Array(); }
 			return this._clapAttempts.slice(1);
 		}
 	});
@@ -132,27 +144,48 @@ function Note(type, dots = 0, customPrefix = "", customSuffix = "", sound = "met
 	this.removeAllClaps = function() {
 		this._clapAttempts = [];
 	};
-	this.updateClapsWithID = function(noteID) {
+	this.updateClapsWithID = function(noteID, timeSignature, tempo = 90) {
+		assert(timeSignature.constructor === TimeSignature);
+		assert(typeof tempo === "number");
+		assert(tempo > 0);
+		
 		const noteElement = document.getElementById(noteID);
+		const extraClapClass = noteID + "-extraClap";
+		$(noteElement.parentNode).children("." + extraClapClass).remove();
+		
+		let tooltipContent = '<div>This note is ' + timeSignature.timingDescription(this.timing, tempo, true) + '</div>';
 		
 		if (this.bestClapTiming === null) {
-			$(noteElement).css("color","black");
+			if (this.ungraded) {
+				$(noteElement).css("color","black");
+			} else {
+				$(noteElement).css("color","hsl(0,80%,40%)");
+			}
 		} else {
-			const threshold = 200;
-			const correctness = Math.max(1 - (Math.abs(this.bestClapTiming) / threshold), 0);
+			const correctness = Math.max(1 - (Math.abs(this.bestClapTiming * Player.beatLength(tempo)) / Note.timingThreshold), 0);
 			
 			const hue = correctness * 125; //125°==green, 0°==red
 			$(noteElement).css("color","hsl(" + hue + ",80%,40%)");
 			//$(noteElement).animate({ color: "hsl(" + hue + ",80%,40%)" }, "slow"); //jQuery can't animate HSL??
 			
-			const extraClapClass = noteID + "-extraClap";
-			$(noteElement.parentNode).children("." + extraClapClass).remove();
 			if (this.extraClaps.length > 0) {
 				for (let extraClap of this.extraClaps) {
 					$(noteElement).after('<div class="extraClap ' + extraClapClass + '" style="left: ' + noteElement.offsetLeft + 'px;">Extra clap!<br/>❗️</div>');
 				}
 			}
+			
+			let adjustedClap = this.timing + this.bestClapTiming;
+			if (adjustedClap < 0) {
+				adjustedClap = timeSignature.top - adjustedClap;
+			}
+			
+			tooltipContent += '<div style="color: hsl(' + hue + ',80%,40%)">You clapped ' + timeSignature.timingDescription(adjustedClap, tempo, true) + '</div>';
 		}
+		
+		$(noteElement).tooltip({
+			content: tooltipContent,
+			disabled: false
+		});
 	};
 	
 	this.relativeLength = function(other) {
@@ -268,6 +301,11 @@ function TimeSignature(top, bottom) {
 		writable: false
 	});
 	
+	Object.defineProperty(this, "isCompound", {
+		value: bottom.dots == 1,
+		writable: false
+	});
+	
 	Object.defineProperty(this, "countoff", {
 		get: function() {
 			let result = [];
@@ -280,12 +318,12 @@ function TimeSignature(top, bottom) {
 			}
 			
 			let rea, dy;
-			if (bottom.dots == 0) {
-				rea = this.bottom.halved();
-				dy = this.bottom.halved();
-			} else {
+			if (this.isCompound) {
 				rea = this.bottom.undotted();
 				dy = this.bottom.undotted().halved();
+			} else {
+				rea = this.bottom.halved();
+				dy = this.bottom.halved();
 			}
 			let go = this.bottom;
 			
@@ -309,6 +347,61 @@ function TimeSignature(top, bottom) {
 		const denominator = bottom.dots === 0 ? bottom.type : bottom.type * 2;
 		
 		return TimeSignature.prefix + TimeSignature.character(numerator, true) + TimeSignature.character(denominator, false) + TimeSignature.suffix;
+	};
+	
+	this.timingDescription = function(timing, tempo = 90, verbose = true) {
+		assert(typeof timing === "number");
+		assert(timing >= 0);
+		assert(typeof tempo === "number");
+		assert(tempo > 0);
+		assert(typeof verbose === "boolean");
+		
+		const beat = Math.floor(timing);
+		const fractionalTiming = timing - beat;
+		
+		const counts = new Map();
+		counts.set("beat", 0);
+		counts.set("e", 1/4);
+		counts.set("+", 1/2);
+		counts.set("a", 3/4);
+		counts.set("di", 1/6);
+		counts.set("ta", 1/3);
+		counts.set("ma", 2/3);
+		counts.set("mi", 5/6);
+		counts.set("nextBeat", 1);
+		
+		let closestCount = "beat";
+		for (let count of counts.keys()) {
+			if (Math.abs(counts.get(count) - fractionalTiming) < Math.abs(counts.get(closestCount) - fractionalTiming)) {
+				closestCount = count;
+			}
+		}
+		
+		let countDescription = closestCount;
+		if (this.isCompound && countDescription === "+") {
+			countDescription = "ti";
+		}
+		
+		let offset = counts.get(closestCount) - fractionalTiming;
+		
+		let initialPhrase = "on";
+		if (offset * Player.beatLength(tempo) > Note.timingThreshold) {
+			initialPhrase = "a little after";
+		} else if (offset * Player.beatLength(tempo) < -Note.timingThreshold) {
+			initialPhrase = "a little before";
+		}
+		
+		if (countDescription === "beat") {
+			countDescription = "<strong>beat " + (beat % this.top + 1) + "</strong>";
+		} else if (countDescription === "nextBeat") {
+			countDescription = "<strong>beat " + (beat % this.top + 2) + "</strong>";
+		} else if (verbose) {
+			countDescription = "the <strong>" + countDescription + "</strong> of " + (beat % this.top + 1) + "<em>(" + counts.get(closestCount) + " of the way through beat " + (beat % this.top + 1) + ")</em>";
+		} else {
+			countDescription = "<strong>" + countDescription + "</strong>" + "<em>(" + counts.get(closestCount) + " of the way through beat " + (beat % this.top + 1) + ")</em>";
+		}
+		
+		return initialPhrase + " " + countDescription;
 	};
 }
 
@@ -344,9 +437,6 @@ TimeSignature.character = function(digit, top) {
 
 //Piece
 
-Piece.barlineCharacter = "\\ ";
-Piece.finalBarlineCharacter = "\\|";
-
 function Piece(timeSignature, notes) {
 	assert(timeSignature.constructor === TimeSignature);
 	assert(Array.isArray(notes));
@@ -360,6 +450,13 @@ function Piece(timeSignature, notes) {
 		value: notes,
 		writable: false
 	});
+	
+	let timing = 0;
+	for (let note of notes) {
+		note.timing = timing;
+		timing += note.relativeLength(timeSignature.bottom);
+		timing = timing % timeSignature.top;
+	}
 	
 	Object.defineProperty(this, "pieceID", {
 		value: "piece",
@@ -435,7 +532,7 @@ function Piece(timeSignature, notes) {
 				}
 			}
 			
-			result += '<span id="' + this.idForNoteIndex(i) + '">';
+			result += '<span id="' + this.idForNoteIndex(i) + '" title="">';
 			result += note.toNotation(beamsIn, beamsOut);
 			if (beamsIn == 0 && beamsOut == 0) {
 				result += this.appropriateSpaces(note);
@@ -448,17 +545,19 @@ function Piece(timeSignature, notes) {
 		return result + Piece.finalBarlineCharacter;
 	};
 	
-	this.removeAllClaps = function() {
+	this.removeGrading = function() {
 		for (let i = 0; i < this.notes.length; i++) {
 			this.notes[i].removeAllClaps();
-			this.notes[i].updateClapsWithID(this.idForNoteIndex(i));
+			this.notes[i].updateClapsWithID(this.idForNoteIndex(i), this.timeSignature);
+			this.notes[i].ungraded = true;
 		}
 	};
 }
 
-//Player
+Piece.barlineCharacter = "\\ ";
+Piece.finalBarlineCharacter = "\\|";
 
-Player.beatLength = function(tempo) { return 1000 * 60/tempo; };
+//Player
 
 function Player(piece = null, tempo = 90) {
 	const setPiece = function(self, newValue) {
@@ -526,10 +625,8 @@ function Player(piece = null, tempo = 90) {
 		let noteElement = null;
 		if (!this.isCountingOff) {
 			noteElement = document.getElementById(this.piece.idForNoteIndex(this._nextNote));
-			//$(noteElement).css("color","red");
-			//$(noteElement).animate({ color: "black" }, "slow");
-			
-			//$(noteElement.parentNode).hide().show(0); //Complete redraw needed in Safari for overlapping beams, but scrolling works, too, so this shouldn't be necessary.
+			currentNote.ungraded = false;
+			currentNote.updateClapsWithID(this.piece.idForNoteIndex(this._nextNote), this.piece.timeSignature, this.tempo);
 		}
 		
 		this._nextNoteTime += currentNote.toMilliseconds(this.piece.timeSignature, this.tempo);
@@ -576,10 +673,12 @@ function Player(piece = null, tempo = 90) {
 			const thisNoteAlreadyHasClap = this.piece.notes[closestNote].bestClapTiming !== null;
 			if (previousNoteHasNoClap && thisNoteAlreadyHasClap) {
 				this.piece.notes[closestNote - 1].addClap(this.piece.notes[closestNote].removeEarliestClap());
-				this.piece.notes[closestNote - 1].updateClapsWithID(this.piece.idForNoteIndex(closestNote - 1));
+				this.piece.notes[closestNote - 1].updateClapsWithID(this.piece.idForNoteIndex(closestNote - 1), this.piece.timeSignature, this.tempo);
 			}
 		}
-		this.piece.notes[closestNote].addClap(offset);
-		this.piece.notes[closestNote].updateClapsWithID(this.piece.idForNoteIndex(closestNote));
+		this.piece.notes[closestNote].addClap(offset / Player.beatLength(this.tempo));
+		this.piece.notes[closestNote].updateClapsWithID(this.piece.idForNoteIndex(closestNote), this.piece.timeSignature, this.tempo);
 	};
 }
+
+Player.beatLength = function(tempo) { return 1000 * 60/tempo; };

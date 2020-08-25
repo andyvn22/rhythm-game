@@ -4,6 +4,7 @@
 	<meta charset="utf-8"/>
 	<meta name="viewport" content="width=device-width"/>
 	<title>Rhythm Game</title>
+	<link rel="stylesheet" href="include/jquery-ui.min.css"/>
 </head>
 <body>
 	<style>
@@ -94,7 +95,7 @@
 		};
 		
 		function playPiece() {
-			player.piece.removeAllClaps();
+			player.piece.removeGrading();
 			player.play();
 		};
 		
