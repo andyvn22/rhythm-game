@@ -1,0 +1,5 @@
+Audio/Counts/*
+!Audio/Counts/generate-counts.sh
+node_modules/*
+
+music.js

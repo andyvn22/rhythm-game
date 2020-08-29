@@ -1,0 +1,14 @@
+{
+  "name": "rhythm-game",
+  "version": "1.0.0",
+  "dependencies": {
+    "@types/jquery": "^3.5.1",
+    "@types/jqueryui": "^1.12.13"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Andy Van Ness <andyvn22@gmail.com> (https://andyvn.ath.cx/)"
+}

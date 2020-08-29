@@ -91,7 +91,7 @@
 		});
 		
 		function displayPiece() {
-			document.getElementById("staff").innerHTML = player.piece.toNotation();
+			document.getElementById("staff").innerHTML = player.piece.notation;
 		};
 		
 		function playPiece() {
@@ -104,37 +104,36 @@
 		};
 		
 		function writeSixEightTest() {
-			const dq = new Note(4, 1);
-			const sixEight = new TimeSignature(2, dq);
+			const sixEight = new TimeSignature(2, Note.quarter.dotted);
 			player.piece = new Piece(sixEight, [
-				new Note(4),
-				new Note(8),
-				new Note(8),
-				new Note(16),
-				new Note(16),
-				new Note(8),
-				new Note(8),
-				new Note(4),
-				new Note(4, 1)
+				Note.quarter,
+				Note.eighth,
+				Note.eighth,
+				Note.sixteenth,
+				Note.sixteenth,
+				Note.eighth,
+				Note.eighth,
+				Note.quarter,
+				Note.quarter.dotted
 			]);
 			
 			displayPiece();
 		};
 		
 		function writeFiveFourTest() {
-			const fiveFour = new TimeSignature(5, new Note(4));
+			const fiveFour = new TimeSignature(5, Note.quarter);
 			player.piece = new Piece(fiveFour, [
-				new Note(8),
-				new Note(4),
-				new Note(8),
-				new Note(16),
-				new Note(16),
-				new Note(8),
-				new Note(8,1),
-				new Note(16),
-				new Note(16),
-				new Note(8),
-				new Note(16)
+				Note.eighth,
+				Note.quarter,
+				Note.eighth,
+				Note.sixteenth,
+				Note.sixteenth,
+				Note.eighth,
+				Note.eighth.dotted,
+				Note.sixteenth,
+				Note.sixteenth,
+				Note.eighth,
+				Note.sixteenth
 			]);
 			
 			displayPiece();

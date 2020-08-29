@@ -10,24 +10,22 @@ JGSW:
 + Count off before playing
 + Accept input & grade!!
 + Store offset info in fractions of a beat, so that you can...
-+ create formatters for counts, and
-+ add tooltips for details on timing!
-- Make Count a real type to clean up
+    + create formatters for counts, and
+    + add tooltips for details on timing!
++ Make Count a real type to clean up
 - Space extra clap markings according to offset
-- Refactor because it's getting ugly and weird.
+- Populate levels based on query strings, by reading from one big ts file
 - Random level generation, based on some parameters to allow for practice of specific skills.
-- Lots of interface work! Big button? Space bar? Tapping on phones?
-- Rests
+- Lots of interface work! Investigate React. Big button? Space bar? Tapping on phones?
 - Abstract level tree you can progress through
-- Accounts saved on server based on hash of email; switching accounts on main page
+- Browser local storage for progress?
+- Can you store all player progress in a URL? This could allow switching devices!
+- Accounts saved on server? based on hash of email; switching accounts on main page
+	- If this isn't viable, how can you learn of students' progress?
+- Rests
 
 POLISH:
 - Make grading hues quadratic instead of linear: it should be easier to get perfect greens.
 - Get permission to host the Rhythms font for this project, or make your own
 	- I'm concerned about spacing. :( You might need to make a custom font.
 - Overlapping beams bother Safari--you've fixed this for inner notes with a hack to do a complete redraw each play, but you need to redraw at the end of a piece, too, and when claps are cleared for a re-try.
-
-EXAMPLE TOOLTIP:
-• This note is on the ma of 2
-• You clapped on the ta of 3
-• You were 2/3 of a beat late
