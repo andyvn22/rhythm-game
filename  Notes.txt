@@ -13,19 +13,42 @@ JGSW:
     + create formatters for counts, and
     + add tooltips for details on timing!
 + Make Count a real type to clean up
-- Space extra clap markings according to offset
-- Populate levels based on query strings, by reading from one big ts file
-- Random level generation, based on some parameters to allow for practice of specific skills.
-- Lots of interface work! Investigate React. Big button? Space bar? Tapping on phones?
++ Space extra clap markings according to offset
++ Populate levels based on query strings, by reading from one big ts file
++ Random level generation, based on some parameters to allow for practice of specific skills.
++ Fix bug that causes tooltips to stick forever when they appear during playback (why show them during playback anyway?)
++ Set up local server
++ Load the site on your phone
++ Fix any existing issues
+    + Disable iOS double-tap-to-zoom
+    + Make tooltips closer to notes
+    + Decrease notation size for low-width screens
+    + Check for touch events so timing is accurate on mobile devices
++ Make tooltips click to show/hide on phone
+    + AUTOMATIC! Thanks Safari for iOS and/or jQuery UI!
++ Hide key commands on phone
+- Show correct counts under the music on graded notes; color the ones that line up with notes & give them the same tooltips as the notes
++ Add a "Tap" button
+- Grade beats, coloring beats in the counting
+- Add a final score summary that appears after the piece is finished
+- Create a guided review of mistakes, suggested in the final score summary
+- Create an option to practice a level at a slower tempo
+- Create an option to practice certain measures from a level
+- Fix block system so it can disallow larger blocks from crossing certain boundaries (e.g. eighth/quarter/eighth syncopation starting on beat 2 of common time)
+    - Can you add an "allowed start" property to blocks, which is by default "anywhere"?
 - Abstract level tree you can progress through
+- Cool background music to help keep beat
+- Add cool animations
 - Browser local storage for progress?
 - Can you store all player progress in a URL? This could allow switching devices!
 - Accounts saved on server? based on hash of email; switching accounts on main page
 	- If this isn't viable, how can you learn of students' progress?
 - Rests
+- Can you check counts via speech recognition?
 
 POLISH:
+- Close tooltips on scroll
+- Does `window.requestAnimationFrame()` polling result in more accurate performance?
 - Make grading hues quadratic instead of linear: it should be easier to get perfect greens.
 - Get permission to host the Rhythms font for this project, or make your own
 	- I'm concerned about spacing. :( You might need to make a custom font.
-- Overlapping beams bother Safari--you've fixed this for inner notes with a hack to do a complete redraw each play, but you need to redraw at the end of a piece, too, and when claps are cleared for a re-try.

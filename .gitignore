@@ -3,3 +3,5 @@ Audio/Counts/*
 node_modules/*
 
 music.js
+index.js
+levels.js

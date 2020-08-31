@@ -7,11 +7,37 @@
 			"problemMatcher": [
 				"$tsc"
 			],
+			"group": "build",
+			"label": "Build",
+			"presentation": {
+				"echo": true,
+				"revealProblems": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"type": "shell",
+			"command": "cp -R rhythm ~/Sites/",
 			"group": {
 				"kind": "build",
 				"isDefault": true
 			},
-			"label": "tsc: build - tsconfig.json"
+			"label": "Install Locally",
+			"dependsOn": [
+				"Build"
+			],
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"revealProblems": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			}
 		}
 	]
 }

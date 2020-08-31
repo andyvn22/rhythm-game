@@ -93,7 +93,7 @@ class Note {
 	ungraded = true;
 	private clapAttempts: Array<number>;
 
-	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = "metronome", clapAttempts = []) {
+	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = "metronome", clapAttempts: Array<number> = []) {
 		assert(dots >= 0 && dots <= 2);
 		
 		this.type = type;
@@ -102,6 +102,10 @@ class Note {
 		this.customSuffix = customSuffix;
 		this.sound = sound;
 		this.clapAttempts = clapAttempts;
+	}
+
+	copy() {
+		return new Note(this.type, this.dots, this.customPrefix, this.customSuffix, this.sound, this.clapAttempts);
 	}
 
 	static get whole() { return new Note(new NoteType(1)); }
@@ -215,52 +219,6 @@ class Note {
 		this.clapAttempts = [];
 	}
 
-	updateClaps(noteID: string, timeSignature: TimeSignature, tempo = 90) {
-		assert(tempo > 0);
-		if (this.timing === undefined) { assertionFailure(); }
-
-		const noteElement = $("#" + noteID);
-
-		const extraClapClass = noteID + "-extraClap";
-		noteElement.parent().children("." + extraClapClass).remove();
-		
-		let tooltipContent = '<div>This note is ' + TimingDescription.of(this.timing, timeSignature, Count.all, tempo).description(true) + '</div>';
-		
-		if (this.bestClapTiming === null) {
-			if (this.ungraded) {
-				noteElement.css("color","black");
-			} else {
-				noteElement.css("color","hsl(0,80%,40%)");
-			}
-		} else {
-			const correctness = Math.max(1 - (Math.abs(this.bestClapTiming * Player.beatLength(tempo)) / Note.timingThreshold), 0);
-			
-			const hue = correctness * 125; //125°==green, 0°==red
-			noteElement.css("color","hsl(" + hue + ",80%,40%)");
-			//noteElement.animate({ color: "hsl(" + hue + ",80%,40%)" }, "slow"); //jQuery can't animate HSL??
-			
-			if (this.extraClaps.length > 0) {
-				for (let extraClap of this.extraClaps) {
-					noteElement.after('<div class="extraClap ' + extraClapClass + '" style="left: ' + noteElement.position().left + 'px;">Extra clap!<br/>❗️</div>');
-				}
-			}
-			
-			let adjustedClap = this.timing + this.bestClapTiming;
-			if (adjustedClap < 0) {
-				adjustedClap = timeSignature.top + adjustedClap;
-			} else if (adjustedClap >= timeSignature.top) {
-				adjustedClap -= timeSignature.top;
-			}
-			
-			tooltipContent += '<div style="color: hsl(' + hue + ',80%,40%)">You clapped ' + TimingDescription.of(adjustedClap, timeSignature, Count.all, tempo).description(true) + '</div>';
-		}
-		
-		$(noteElement).tooltip({
-			content: tooltipContent,
-			disabled: false
-		});
-	}
-
 	static readonly dotCharacter = ".";
 	static readonly timingThreshold = 200; //in milliseconds, so we have higher standards at slower tempos
 
@@ -338,13 +296,11 @@ class TimingDescription {
 	description(verbose: boolean) {
 		let result: string;
 		if (this.count.isEqual(Count.beat)) {
-			result = "<strong>" + this.longBeatDescription + "</strong>";
+			result = `<strong>${this.longBeatDescription}</strong>`;
 		} else if (verbose) {
-			result = "the <strong>" + this.count.toString() + "</strong> of " + this.shortBeatDescription +
-				" <em>(" + this.count.timingString + " " + this.longBeatDescription + ")</em>";
+			result = `the <strong>${this.count.toString()}</strong> of ${this.shortBeatDescription} <em>(${this.count.timingString} ${this.longBeatDescription})</em>`;
 		} else {
-			result = "<strong>" + this.count.toString() + "</strong>" +
-				" <em>(" + this.count.timingString + " " + this.longBeatDescription + ")</em>";
+			result = `<strong>${this.count.toString()}</strong> <em>(${this.count.timingString} ${this.longBeatDescription})</em>`;
 		}
 		return this.precision + " " + result;
 	}
@@ -443,6 +399,18 @@ class TimeSignature {
 		this.bottom = bottom;
 	}
 
+	static get twoFour() { return new TimeSignature(3, Note.quarter); }
+	static get threeFour() { return new TimeSignature(3, Note.quarter); }
+	static get fourFour() { return new TimeSignature(4, Note.quarter); }
+	static get fiveFour() { return new TimeSignature(5, Note.quarter); }
+
+	static get commonTime() { return TimeSignature.fourFour; }
+	static get cutTime() { return new TimeSignature(4, Note.quarter); }
+
+	static get sixEight() { return new TimeSignature(2, Note.quarter.dotted); }
+	static get nineEight() { return new TimeSignature(3, Note.quarter.dotted); }
+	static get twelveEight() { return new TimeSignature(4, Note.quarter.dotted); }
+
 	get isCompound() {
 		return this.bottom.dots == 1;
 	}
@@ -489,6 +457,16 @@ class TimeSignature {
 		return TimeSignature.prefix + TimeSignature.topCharacter(numerator as TimeSignatureTop) + TimeSignature.bottomCharacter(denominator as NoteTypeName) + TimeSignature.suffix;
 	}
 
+	offsetTiming(timing: number, offset: number) {
+		let result = timing + offset;
+		if (result < 0) {
+			result = this.top + result;
+		} else if (result >= this.top) {
+			result -= this.top;
+		}
+		return result;
+	}
+
 	static readonly prefix = '<span class="timeSignature">';
 	static readonly suffix = '</span>';
 
@@ -520,6 +498,50 @@ class TimeSignature {
 }
 
 /**
+ * Several notes combined into a rhythmic unit usable as a building block for a measure of music
+ */
+class Block {
+	readonly notes: Array<Note>;
+
+	constructor(notes: Array<Note>) {
+		assert(notes.length > 0);
+		this.notes = notes;
+	}
+
+	lengthIn(timeSignature: TimeSignature) {
+		return this.notes.reduce((a,b) => a + b.relativeLength(timeSignature.bottom), 0);
+	}
+
+	static lengthOf(blocks: Array<Block>, timeSignature: TimeSignature) {
+		return blocks.reduce((a,b) => a + b.lengthIn(timeSignature), 0);
+	}
+
+	fitsAfter(blocks: Array<Block>, timeSignature: TimeSignature) {
+		return Block.lengthOf(blocks, timeSignature) + this.lengthIn(timeSignature) <= timeSignature.top;
+	}
+
+	/**
+	 * Returns every possible evolution of a given in-progress measure
+	 * @param original The partial measure to build upon. If it's already finished, it's returned as-is.
+	 * @param timeSignature The time signature in which to work
+	 * @param possibilities A library of blocks to use. If none of them can be applied to `original`, an empty array is returned.
+	 */
+	static allPossibleNextStepsFor(original: Array<Block>, timeSignature: TimeSignature, possibilities: Array<Block>) {
+		const currentLength = Block.lengthOf(original, timeSignature);
+		if (currentLength == timeSignature.top) { return [original]; }
+		return possibilities.filter(x => x.fitsAfter(original, timeSignature)).map(x => original.concat(x));
+	}
+
+	static allPossibleMeasuresFrom(possibilities: Array<Block>, timeSignature: TimeSignature) {
+		let result: Array<Array<Block>> = possibilities.map(x => [x]);
+		while (result.filter(x => Block.lengthOf(x, timeSignature) < timeSignature.top).length > 0) {
+			result = result.map(x => Block.allPossibleNextStepsFor(x, timeSignature, possibilities)).reduce((a,b) => a.concat(b), []);
+		}
+		return result.map(x => x.reduce((a,b) => a.concat(b.notes), [] as Array<Note>));
+	}
+}
+
+/**
  * A piece of music, consisting of sequential notes in a particular time signature.
  */
 class Piece {
@@ -529,16 +551,28 @@ class Piece {
 	/** A unique ID for this piece, usable to look up generated notation as HTML elements. */
 	pieceID?: string;
 
-	constructor(timeSignature: TimeSignature, notes: Array<Note>) {
+	constructor(timeSignature: TimeSignature, notes: Array<Note> = []) {
 		this.timeSignature = timeSignature;
-		this.notes = notes;
+		this.notes = notes.map(x => x.copy());
 		
 		let timing = 0;
-		for (let note of notes) {
+		for (let note of this.notes) {
 			note.timing = timing;
 			timing += note.relativeLength(timeSignature.bottom);
 			timing = timing % timeSignature.top;
 		}
+	}
+
+	static randomWithBlocks(blocks: Array<Block>, timeSignature: TimeSignature, measures: number) {
+		assert(measures > 0);
+		const possibleMeasures = Block.allPossibleMeasuresFrom(blocks, timeSignature);
+
+		let result: Array<Note> = [];
+		for (let i = 0; i < measures; i++) {
+			result = result.concat(possibleMeasures[Math.floor(Math.random() * possibleMeasures.length)]);
+		}
+
+		return new Piece(timeSignature, result);
 	}
 
 	get maxNoteType() {
@@ -567,7 +601,17 @@ class Piece {
 		for (let i = 0; i < this.notes.length; i++) {
 			this.notes[i].removeAllClaps();
 			this.notes[i].ungraded = true;
-			this.notes[i].updateClaps(this.idForNoteIndex(i), this.timeSignature);
+			this.updateClapsForNoteAtIndex(i);
+		}
+	}
+
+	showTooltips(showTooltips: boolean) {
+		for (let i = 0; i < this.notes.length; i++) {
+			const noteElement = $("#" + this.idForNoteIndex(i));
+			noteElement.tooltip(showTooltips ? "enable" : "disable");
+			if (!showTooltips) {
+				noteElement.attr("title", ""); //needed because jQuery bug removes `title` attribute when disabling tooltips, and then they never can be re-enabled
+			}
 		}
 	}
 
@@ -619,17 +663,107 @@ class Piece {
 				}
 			}
 			
-			result += '<span id="' + this.idForNoteIndex(i) + '" title="">';
-			result += note.notation(beamsIn, beamsOut);
+			result += `<span id="${this.idForNoteIndex(i)}" title="">${note.notation(beamsIn, beamsOut)}</span>`;
 			if (beamsIn == 0 && beamsOut == 0) {
 				result += this.appropriateSpaces(note);
 			}
-			result += '</span>';
 			
 			currentBeat += noteLength;
 			previousBeams = beamsOut;
 		}
 		return result + Piece.finalBarlineCharacter;
+	}
+
+	/**
+	 * Converts a beat offset from a note into a pixel offset from a note HTML element
+	 * @param offset The beat offset to convert
+	 * @param noteIndex The index of the note to offset from
+	 */
+	positionOffsetFromNoteIndex(offset: number, noteIndex: number) {
+		assert(noteIndex >= 0);
+		assert(noteIndex < this.notes.length);
+
+		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
+		const noteXPosition = noteElement.position().left;
+
+		if (offset < 0) {
+			if (noteIndex > 0) {
+				const previousIndex = noteIndex - 1;
+				const previousElement = $("#" + this.idForNoteIndex(previousIndex));
+				const totalLength = this.notes[previousIndex].relativeLength(this.timeSignature.bottom);
+				const positionXDistance = noteXPosition - previousElement.position().left;
+				const fraction = offset / totalLength;
+				return fraction * positionXDistance;
+			} else {
+				return 0;
+			}
+		} else {
+			if (noteIndex < this.notes.length - 1) {
+				const nextIndex = noteIndex + 1;
+				const nextElement = $("#" + this.idForNoteIndex(nextIndex));
+				const totalLength = this.notes[noteIndex].relativeLength(this.timeSignature.bottom);
+				const positionXDistance = nextElement.position().left - noteXPosition;
+				const fraction = offset / totalLength;
+				return fraction * positionXDistance;
+			} else {
+				return 0;
+			}
+		}
+	}
+
+	updateClapsForNoteAtIndex(noteIndex: number, tempo = 90) {
+		assert(tempo > 0);
+		assert(noteIndex >= 0);
+		assert(noteIndex < this.notes.length);
+
+		const note = this.notes[noteIndex];
+		if (note.timing === undefined) { assertionFailure(); }
+
+		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
+
+		const extraClapClass = this.idForNoteIndex(noteIndex) + "-extraClap";
+		noteElement.parent().children("." + extraClapClass).remove();
+		
+		let tooltipContent = `<div>This note is ${TimingDescription.of(note.timing, this.timeSignature, Count.all, tempo).description(true)}</div>`;
+		
+		if (note.bestClapTiming === null) {
+			if (note.ungraded) {
+				noteElement.css("color","black");
+			} else {
+				noteElement.css("color","hsl(0,80%,40%)");
+				tooltipContent += `<div style="color: hsl(0,80%,40%)">You didn't clap near it.</div>`;
+			}
+		} else {
+			const correctness = Math.max(1 - (Math.abs(note.bestClapTiming * Player.beatLength(tempo)) / Note.timingThreshold), 0);
+			
+			const hue = correctness * 125; //125°==green, 0°==red
+			noteElement.css("color", `hsl(${hue},80%,40%)`);
+			
+			if (note.extraClaps.length > 0) {
+				for (let extraClap of note.extraClaps) {
+					const position = this.positionOffsetFromNoteIndex(extraClap, noteIndex);
+					const extraClapElement = $(`<div class="extraClap ${extraClapClass}" title="">Extra clap<br/>❗️</div>`);
+					noteElement.parent().append(extraClapElement);
+					extraClapElement.position({
+						my: "center top",
+						at: `center+${position} top`,
+						of: noteElement,
+						collision: "fit",
+						within: noteElement.parent()
+					})
+					extraClapElement.tooltip({
+						content: `<div style="color: hsl(0,80%,40%)">You added a clap ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, extraClap), this.timeSignature, Count.all, tempo).description(true)}</div>`
+					});
+				}
+			}
+			
+			tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You clapped ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, note.bestClapTiming), this.timeSignature, Count.all, tempo).description(true)}</div>`;
+		}
+		
+		noteElement.tooltip({
+			content: tooltipContent,
+			position: { my: "center top", at: "center bottom-30", collision: "fit" }
+		});
 	}
 
 	static readonly barlineCharacter = "\\ ";
@@ -639,7 +773,7 @@ class Piece {
 /**
  * Data the Player class uses to track in-progress playback of a piece.
  */
-interface playback {
+interface Playback {
 	startTime: number;
 	nextNote: number;
 	nextNoteTime: number;
@@ -649,20 +783,25 @@ interface playback {
  * A music player which can play back a piece of music at a given tempo, and accept & grade performed claps.
  */
 class Player {
-	private _piece?: Piece;
+	private _piece: Piece;
 	get piece() { return this._piece; }
-	set piece(newValue: Piece | undefined) {
+	set piece(newValue: Piece) {
 		this._piece = newValue;
 		this.playback = undefined;
 	}
 
 	tempo: number;
+	/**
+	 * Called when the player finishes playback.
+	 */
+	callback: () => void;
 
-	private playback?: playback;
+	private playback?: Playback;
 
-	constructor(piece = undefined, tempo = 90) {
+	constructor(piece: Piece, tempo = 90, callback = function() {}) {
 		this._piece = piece;
 		this.tempo = tempo;
+		this.callback = callback;
 	}
 
 	get isPlaying() { return this.playback !== undefined; }
@@ -672,7 +811,7 @@ class Player {
 		return this.isPlaying && this.playback.nextNote < 0;
 	}
 
-	play() {
+	play(countOff = true) {
 		if (this.isPlaying) { return; }
 		if (this.piece === undefined) { return; }
 
@@ -680,12 +819,20 @@ class Player {
 		playerElement.parent().scrollLeft(0);
 		
 		const now = Date.now();
-		this.playback = { startTime: now, nextNoteTime: now, nextNote: 0 - this.piece.timeSignature.countoff.notes.length };
+		this.playback = { startTime: now, nextNoteTime: now, nextNote: countOff ? 0 - this.piece.timeSignature.countoff.notes.length : 0 };
+		this.piece.showTooltips(false);
 		this.playNote();
 	}
 
+	/**
+	 * Stops playback, re-enabling tooltips on `piece` and calling `callback` if set. If playback has already been stopped, does nothing.
+	 */
 	stop() {
+		if (!this.isPlaying) { return; }
+		
 		this.playback = undefined;
+		this.piece.showTooltips(true);
+		this.callback();
 	}
 
 	gradeClap() {
@@ -712,11 +859,11 @@ class Player {
 			const thisNoteAlreadyHasClap = this.piece.notes[closestNote].bestClapTiming !== null;
 			if (previousNoteHasNoClap && thisNoteAlreadyHasClap) {
 				this.piece.notes[closestNote - 1].addClap(this.piece.notes[closestNote].removeEarliestClap() as number);
-				this.piece.notes[closestNote - 1].updateClaps(this.piece.idForNoteIndex(closestNote - 1), this.piece.timeSignature, this.tempo);
+				this.piece.updateClapsForNoteAtIndex(closestNote - 1, this.tempo);
 			}
 		}
 		this.piece.notes[closestNote].addClap(offset / Player.beatLength(this.tempo));
-		this.piece.notes[closestNote].updateClaps(this.piece.idForNoteIndex(closestNote), this.piece.timeSignature, this.tempo);
+		this.piece.updateClapsForNoteAtIndex(closestNote, this.tempo);
 	}
 
 	private playNote() {
@@ -735,7 +882,7 @@ class Player {
 		if (!this.isCountingOff) {
 			noteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
 			currentNote.ungraded = false;
-			currentNote.updateClaps(this.piece.idForNoteIndex(this.playback.nextNote), this.piece.timeSignature, this.tempo);
+			this.piece.updateClapsForNoteAtIndex(this.playback.nextNote, this.tempo);
 		}
 		
 		this.playback.nextNoteTime += currentNote.milliseconds(this.piece.timeSignature, this.tempo);

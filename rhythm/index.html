@@ -4,7 +4,8 @@
 	<meta charset="utf-8"/>
 	<meta name="viewport" content="width=device-width"/>
 	<title>Rhythm Game</title>
-	<link rel="stylesheet" href="include/jquery-ui.min.css"/>
+	<link rel="stylesheet" href="include/jquery-ui.css"/>
+	<link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
 </head>
 <body>
 	<style>
@@ -23,130 +24,72 @@
 		
 		html, body {
 			min-height: 100%;
+			text-align: center;
+
+			user-select: none;
+			-webkit-user-select: none;
+			cursor: default;
 		}
 		
 		#staff {
 			font-family: "Rhythms";
-			font-size: 8em;
+			font-size: 10vw;
 			padding-right: 100%;
 			overflow: scroll;
 			white-space: nowrap;
 			position: relative;
-			
-			/*user-select: none;
-			-webkit-user-select: none;
-			cursor: default;*/
 		}
 		
 		.extraClap {
 			position: absolute;
 			font-size: 0.1em;
 			font-family: Helvetica, sans-serif;
-			color: red;
+			color: hsl(0,80%,40%);
 			top: 1em;
 			text-align: center;
 		}
-		
-		.test {
-			color: blue;
-			text-decoration: none;
+
+		#buttons {
+			font-size: 1.5em;
+			touch-action: manipulation;
 		}
-		
-		.test:hover {
-			color: red;
+
+		/* default to landscape */
+		#buttons .ui-button {
+			width: 30%;
+			max-width: 10em;
+			height: 4em;
+		}
+
+		@media screen and (orientation: portrait) {
+			#buttons .ui-button {
+				width: 90%;
+				margin: 0.25em;
+			}
+
+			#buttons {
+				white-space: pre-line;
+			}
+
+			#buttons .ui-button::after {
+				content: "\A";
+			}
 		}
 	</style>
 	<script src="include/jquery-1.12.2.min.js"></script>
 	<script src="include/jquery-ui.min.js"></script>
 	<script src="include/ion.sound.min.js"></script>
 	<script src="music.js"></script>
-	<script>
-		"use strict";
-		
-		let player = new Player();
-		
-		$(document).ready(function() {
-			ion.sound({
-				sounds: [
-					{ name: "metronome", volume: 0.8 },
-					{ name: "1" },
-					{ name: "2" },
-					{ name: "3" },
-					{ name: "4" },
-					{ name: "5" },
-					{ name: "6" },
-					{ name: "7" },
-					{ name: "8" },
-					{ name: "9" },
-					{ name: "10" },
-					{ name: "rea-" },
-					{ name: "-dy" },
-					{ name: "go" }
-				],
-				volume: 0.8,
-				path: "media/sounds/",
-				preload: true,
-				multiplay: true
-			});
-		});
-		
-		function displayPiece() {
-			document.getElementById("staff").innerHTML = player.piece.notation;
-		};
-		
-		function playPiece() {
-			player.piece.removeGrading();
-			player.play();
-		};
-		
-		function clap() {
-			player.gradeClap();
-		};
-		
-		function writeSixEightTest() {
-			const sixEight = new TimeSignature(2, Note.quarter.dotted);
-			player.piece = new Piece(sixEight, [
-				Note.quarter,
-				Note.eighth,
-				Note.eighth,
-				Note.sixteenth,
-				Note.sixteenth,
-				Note.eighth,
-				Note.eighth,
-				Note.quarter,
-				Note.quarter.dotted
-			]);
-			
-			displayPiece();
-		};
-		
-		function writeFiveFourTest() {
-			const fiveFour = new TimeSignature(5, Note.quarter);
-			player.piece = new Piece(fiveFour, [
-				Note.eighth,
-				Note.quarter,
-				Note.eighth,
-				Note.sixteenth,
-				Note.sixteenth,
-				Note.eighth,
-				Note.eighth.dotted,
-				Note.sixteenth,
-				Note.sixteenth,
-				Note.eighth,
-				Note.sixteenth
-			]);
-			
-			displayPiece();
-		};
-	</script>
+	<script src="levels.js"></script>
+	<script src="index.js"></script>
 	<h1>Rhythm Game</h1>
 	<div id="staff">
 		
 	</div>
-	<button onclick="writeSixEightTest();">Write 6/8 Test Piece!</button>
-	<button onclick="writeFiveFourTest();">Write 5/4 Test Piece!</button>
-	<button onclick="playPiece();">Play This Piece!</button>
-	
-	<button onclick="clap();">Clap</button>
+	<div id="buttons">
+		<button id="play"></button>
+		<button id="tap"></button>
+		<button id="clap"></button>
+	</div>
 </body>
 </html>
