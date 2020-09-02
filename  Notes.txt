@@ -27,7 +27,7 @@ JGSW:
 + Make tooltips click to show/hide on phone
     + AUTOMATIC! Thanks Safari for iOS and/or jQuery UI!
 + Hide key commands on phone
-- Show correct counts under the music on graded notes; color the ones that line up with notes & give them the same tooltips as the notes
++ Show correct counts under the music on graded notes; color the ones that line up with notes & give them the same tooltips as the notes
 + Add a "Tap" button
 - Grade beats, coloring beats in the counting
 - Add a final score summary that appears after the piece is finished
@@ -45,8 +45,15 @@ JGSW:
 	- If this isn't viable, how can you learn of students' progress?
 - Rests
 - Can you check counts via speech recognition?
+- Add a link to explain why a note has the count it does
+- Add special nodes to the level tree that are just explanations, that pass automatically on load
+- Allow special nodes to include multiple choice or matching quizzes (for note recognition & beat length in time signatures)
 
 POLISH:
+- Give every glyph a special offset so that counts can be PERFECTLY aligned
+- Move counts & extra claps & anything else relatively positioned when you resize the window
+    - Can you achieve this automatically by using em positioning, or attaching them to note spans instead of the parent container?
+- The lead distance on the scrolling is hardcoded to 100px, but should be em-based
 - Close tooltips on scroll
 - Does `window.requestAnimationFrame()` polling result in more accurate performance?
 - Make grading hues quadratic instead of linear: it should be easier to get perfect greens.

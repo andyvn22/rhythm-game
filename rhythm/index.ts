@@ -110,7 +110,7 @@ $(document).keydown(function(event) {
 function displayPiece() {
     $("#staff").html(player.piece.notation);
     for (let i = 0; i < level.piece.notes.length; i++) {
-        level.piece.updateClapsForNoteAtIndex(i);
+        level.piece.updateAppearanceOfNoteAtIndex(i);
     }
 };
 

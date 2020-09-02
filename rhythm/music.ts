@@ -12,6 +12,78 @@ function assertionFailure(message = "Assertion failed: unreachable code"): never
 	throw message;
 }
 
+/**
+ * An event (like a note or beat), whose timing is specified in absolute beats from the start of a piece
+ */
+class MusicEvent {
+	/** The absolute time (in beats) of the event, since the start of the piece */
+	timing: number;
+
+	/** Whether or not this event's performance attempts should be graded */
+	graded: boolean;
+
+	/** A sorted list of offsets of attempts to match this event's timing */
+	private performanceAttempts: Array<number>;
+	
+	constructor(timing: number, graded = false, performanceAttempts = []) {
+		this.timing = timing;
+		this.graded = graded;
+		this.performanceAttempts = performanceAttempts;
+	}
+
+	/** The offset of the best attempt to match this event's timing, or `null` if none exists */
+	get bestPerformanceAttempt() {
+		if (this.performanceAttempts.length == 0) { return null; }
+		return this.performanceAttempts[0];
+	}
+
+	/** Any extra (beyond the first, best) attempts to match this event's timing, as an array of offsets */
+	get extraPerformanceAttempts() {
+		if (this.performanceAttempts.length == 0) { return []; }
+		else return this.performanceAttempts.slice(1);
+	}
+
+	/** Add an offset as an attempt to match this event's timing */
+	addPerformanceAttempt(offset: number) {
+		const bestTimingSort = function(a: number, b: number) {
+			if (Math.abs(a) < Math.abs(b)) { return -1; }
+			else if (Math.abs(a) > Math.abs(b)) { return 1; }
+			else { return 0; }
+		}
+
+		this.performanceAttempts.push(offset);
+		this.performanceAttempts.sort(bestTimingSort);
+	}
+
+	/** Remove (and return) the earliest performance attempt from the list, or return `null` if there are no attempts */
+	removeEarliestPerformanceAttempt() {
+		if (this.performanceAttempts.length == 0) { return null; }
+
+		let indexOfEarliestAttempt = 0;
+		for (let i = 0; i < this.performanceAttempts.length; i++) {
+			if (this.performanceAttempts[i] < this.performanceAttempts[indexOfEarliestAttempt]) {
+				indexOfEarliestAttempt = i;
+			}
+		}
+
+		const result = this.performanceAttempts[indexOfEarliestAttempt];
+		this.performanceAttempts.splice(indexOfEarliestAttempt, 1);
+		return result;
+	}
+
+	removeAllPerformanceAttempts() {
+		this.performanceAttempts = [];
+	}
+
+	correctness(tempo: number) {
+		assert(tempo > 0);
+		if (this.bestPerformanceAttempt === null) { return null; }
+		return Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0);
+	}
+
+	static readonly timingThreshold = 200; //ms
+}
+
 type NoteTypeName = 1 | 2 | 4 | 8 | 16;
 type NoteTypeBeams = 0 | 1 | 2;
 
@@ -89,11 +161,14 @@ class Note {
 	customPrefix: string;
 	customSuffix: string;
 	sound: string;
+	/**
+	 * Guaranteed to exist for any note inside of a `Piece`, this is the 0-indexed measure-relative timing of the start of the note. (For example, a note on the and of two would have `timing == 1.5`.)
+	 */
 	timing?: number;
-	ungraded = true;
-	private clapAttempts: Array<number>;
+	graded = false;
+	private clapAttempts: Array<number> = [];
 
-	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = "metronome", clapAttempts: Array<number> = []) {
+	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = "metronome") {
 		assert(dots >= 0 && dots <= 2);
 		
 		this.type = type;
@@ -101,11 +176,10 @@ class Note {
 		this.customPrefix = customPrefix;
 		this.customSuffix = customSuffix;
 		this.sound = sound;
-		this.clapAttempts = clapAttempts;
 	}
 
 	copy() {
-		return new Note(this.type, this.dots, this.customPrefix, this.customSuffix, this.sound, this.clapAttempts);
+		return new Note(this.type, this.dots, this.customPrefix, this.customSuffix, this.sound);
 	}
 
 	static get whole() { return new Note(new NoteType(1)); }
@@ -219,6 +293,28 @@ class Note {
 		this.clapAttempts = [];
 	}
 
+	correctness(tempo: number) {
+		assert(tempo > 0);
+
+		if (this.bestClapTiming === null) {
+			return null;
+		} else {
+			return Math.max(1 - (Math.abs(this.bestClapTiming * Player.beatLength(tempo)) / Note.timingThreshold), 0);
+		}
+	}
+
+	countings(timeSignature: TimeSignature) {
+		if (this.timing === undefined) { assertionFailure(); }
+
+		let result = [0];
+		for (let i = 0; i < timeSignature.top; i++) {
+			if (i > this.timing && i < this.timing + this.relativeLength(timeSignature.bottom)) {
+				result.push(i - this.timing);
+			}
+		}
+		return result;
+	}
+
 	static readonly dotCharacter = ".";
 	static readonly timingThreshold = 200; //in milliseconds, so we have higher standards at slower tempos
 
@@ -233,6 +329,10 @@ class Note {
 };
 
 type TimingPrecision = "on" | "a little before" | "a little after";
+
+enum Verbosity {
+	short, medium, long
+}
 
 /**
  * A description of a given timing
@@ -293,16 +393,19 @@ class TimingDescription {
 		return "beat " + this.shortBeatDescription;
 	}
 
-	description(verbose: boolean) {
-		let result: string;
+	description(verbosity: Verbosity): string {
 		if (this.count.isEqual(Count.beat)) {
-			result = `<strong>${this.longBeatDescription}</strong>`;
-		} else if (verbose) {
-			result = `the <strong>${this.count.toString()}</strong> of ${this.shortBeatDescription} <em>(${this.count.timingString} ${this.longBeatDescription})</em>`;
+			switch (verbosity) {
+				case Verbosity.short: return `<strong>${this.shortBeatDescription}</strong>`;
+				default: return `<strong>${this.longBeatDescription}</strong>`;
+			}
 		} else {
-			result = `<strong>${this.count.toString()}</strong> <em>(${this.count.timingString} ${this.longBeatDescription})</em>`;
+			switch (verbosity) {
+				case Verbosity.short: return `<strong>${this.count.toString()}</strong>`;
+				case Verbosity.medium: return `${this.precision} <strong>${this.count.toString()}</strong> <em>(${this.count.timingString} ${this.longBeatDescription})</em>`;
+				case Verbosity.long: return `${this.precision} the <strong>${this.count.toString()}</strong> of ${this.shortBeatDescription} <em>(${this.count.timingString} ${this.longBeatDescription})</em>`;
+			}
 		}
-		return this.precision + " " + result;
 	}
 }
 
@@ -445,6 +548,14 @@ class TimeSignature {
 		return new Piece(this, result);
 	}
 
+	measuresOfBeats(measures: number) {
+		let result: Array<Note> = [];
+		for (let i = 0; i < measures * this.top; i++) {
+			result.push(this.bottom.normalized);
+		}
+		return result;
+	}
+
 	toString() {
 		return this.top + " over " + this.bottom.toString();
 	}
@@ -557,9 +668,8 @@ class Piece {
 		
 		let timing = 0;
 		for (let note of this.notes) {
-			note.timing = timing;
+			note.timing = timing % timeSignature.top
 			timing += note.relativeLength(timeSignature.bottom);
-			timing = timing % timeSignature.top;
 		}
 	}
 
@@ -600,8 +710,8 @@ class Piece {
 	removeGrading() {
 		for (let i = 0; i < this.notes.length; i++) {
 			this.notes[i].removeAllClaps();
-			this.notes[i].ungraded = true;
-			this.updateClapsForNoteAtIndex(i);
+			this.notes[i].graded = false;
+			this.updateAppearanceOfNoteAtIndex(i);
 		}
 	}
 
@@ -711,7 +821,11 @@ class Piece {
 		}
 	}
 
-	updateClapsForNoteAtIndex(noteIndex: number, tempo = 90) {
+	private static hueForCorrectness(correctness: number) {
+		return correctness * 125; //125°==green, 0°==red
+	}
+
+	updateAppearanceOfNoteAtIndex(noteIndex: number, tempo = 90) {
 		assert(tempo > 0);
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
@@ -720,50 +834,99 @@ class Piece {
 		if (note.timing === undefined) { assertionFailure(); }
 
 		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
-
-		const extraClapClass = this.idForNoteIndex(noteIndex) + "-extraClap";
-		noteElement.parent().children("." + extraClapClass).remove();
 		
-		let tooltipContent = `<div>This note is ${TimingDescription.of(note.timing, this.timeSignature, Count.all, tempo).description(true)}</div>`;
+		let tooltipContent = `<div>This note is ${TimingDescription.of(note.timing, this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`;
 		
-		if (note.bestClapTiming === null) {
-			if (note.ungraded) {
-				noteElement.css("color","black");
-			} else {
-				noteElement.css("color","hsl(0,80%,40%)");
-				tooltipContent += `<div style="color: hsl(0,80%,40%)">You didn't clap near it.</div>`;
-			}
+		if (!note.graded) {
+			noteElement.css("color","black");
 		} else {
-			const correctness = Math.max(1 - (Math.abs(note.bestClapTiming * Player.beatLength(tempo)) / Note.timingThreshold), 0);
-			
-			const hue = correctness * 125; //125°==green, 0°==red
-			noteElement.css("color", `hsl(${hue},80%,40%)`);
-			
-			if (note.extraClaps.length > 0) {
-				for (let extraClap of note.extraClaps) {
-					const position = this.positionOffsetFromNoteIndex(extraClap, noteIndex);
-					const extraClapElement = $(`<div class="extraClap ${extraClapClass}" title="">Extra clap<br/>❗️</div>`);
-					noteElement.parent().append(extraClapElement);
-					extraClapElement.position({
-						my: "center top",
-						at: `center+${position} top`,
-						of: noteElement,
-						collision: "fit",
-						within: noteElement.parent()
-					})
-					extraClapElement.tooltip({
-						content: `<div style="color: hsl(0,80%,40%)">You added a clap ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, extraClap), this.timeSignature, Count.all, tempo).description(true)}</div>`
-					});
-				}
+			const hue = Piece.hueForCorrectness(note.correctness(tempo) ?? 0);
+
+			if (note.bestClapTiming === null) {
+				tooltipContent += `<div style="color: hsl(0,80%,40%)">You didn't clap near it.</div>`;
+			} else {
+				tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You clapped ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, note.bestClapTiming), this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`;
 			}
-			
-			tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You clapped ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, note.bestClapTiming), this.timeSignature, Count.all, tempo).description(true)}</div>`;
+
+			noteElement.css("color", `hsl(${hue},80%,40%)`);
 		}
 		
 		noteElement.tooltip({
 			content: tooltipContent,
 			position: { my: "center top", at: "center bottom-30", collision: "fit" }
 		});
+
+		this.updateExtraClapsOfNoteAtIndex(noteIndex, tempo);
+		this.updateCountingsOfNoteAtIndex(noteIndex, tempo); //must be called after setting `noteElement.tooltip`
+	}
+
+	private updateExtraClapsOfNoteAtIndex(noteIndex: number, tempo: number) {
+		assert(tempo > 0);
+		assert(noteIndex >= 0);
+		assert(noteIndex < this.notes.length);
+		
+		const note = this.notes[noteIndex];
+		if (note.timing === undefined) { assertionFailure(); }
+		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
+
+		const extraClapClass = this.idForNoteIndex(noteIndex) + "-extraClap";
+		noteElement.parent().children("." + extraClapClass).remove();
+
+		if (!note.graded || note.extraClaps.length == 0) { return; }
+
+		for (let extraClap of note.extraClaps) {
+			const position = this.positionOffsetFromNoteIndex(extraClap, noteIndex);
+			const extraClapElement = $(`<div class="extraClap ${extraClapClass}" title="">Extra clap<br/>❗️</div>`);
+			noteElement.parent().append(extraClapElement);
+			extraClapElement.position({
+				my: "center top",
+				at: `center+${position} top+20`,
+				of: noteElement,
+				collision: "fit",
+				within: noteElement.parent()
+			})
+			extraClapElement.tooltip({
+				content: `<div style="color: hsl(0,80%,40%)">You added a clap ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, extraClap), this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`
+			});
+		}
+	}
+
+	private updateCountingsOfNoteAtIndex(noteIndex: number, tempo: number) {
+		assert(tempo > 0);
+		assert(noteIndex >= 0);
+		assert(noteIndex < this.notes.length);
+		
+		const note = this.notes[noteIndex];
+		if (note.timing === undefined) { assertionFailure(); }
+		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
+
+		const countingClass = this.idForNoteIndex(noteIndex) + "-counting";
+		noteElement.parent().children("." + countingClass).remove();
+
+		if (!note.graded) { return; }
+
+		for (let relativeCounting of note.countings(this.timeSignature)) {
+			const absoluteCounting = this.timeSignature.offsetTiming(note.timing, relativeCounting);
+			const position = this.positionOffsetFromNoteIndex(relativeCounting, noteIndex);
+			const hue = Piece.hueForCorrectness(note.correctness(tempo) ?? 0);
+			const color = (Math.floor(absoluteCounting) === absoluteCounting) ? `black` : `hsl(${hue},80%,40%)`;
+			const countingElement = $(`<div style="color: ${color}" class="counting ${countingClass}" title="">${TimingDescription.of(absoluteCounting, this.timeSignature, Count.all, tempo).description(Verbosity.short)}&nbsp;&nbsp;</div>`);
+			noteElement.parent().append(countingElement);
+			countingElement.position({
+				my: "right bottom",
+				at: `center+${position} bottom-40`,
+				of: noteElement,
+				collision: "fit",
+				within: noteElement.parent()
+			})
+
+			if (relativeCounting === 0) {
+				const noteElement = $("#" + this.idForNoteIndex(noteIndex));
+				countingElement.tooltip({
+					content: noteElement.tooltip("option", "content")
+				});
+			}
+		}
 	}
 
 	static readonly barlineCharacter = "\\ ";
@@ -859,11 +1022,11 @@ class Player {
 			const thisNoteAlreadyHasClap = this.piece.notes[closestNote].bestClapTiming !== null;
 			if (previousNoteHasNoClap && thisNoteAlreadyHasClap) {
 				this.piece.notes[closestNote - 1].addClap(this.piece.notes[closestNote].removeEarliestClap() as number);
-				this.piece.updateClapsForNoteAtIndex(closestNote - 1, this.tempo);
+				this.piece.updateAppearanceOfNoteAtIndex(closestNote - 1, this.tempo);
 			}
 		}
 		this.piece.notes[closestNote].addClap(offset / Player.beatLength(this.tempo));
-		this.piece.updateClapsForNoteAtIndex(closestNote, this.tempo);
+		this.piece.updateAppearanceOfNoteAtIndex(closestNote, this.tempo);
 	}
 
 	private playNote() {
@@ -881,8 +1044,8 @@ class Player {
 		let noteElement = null;
 		if (!this.isCountingOff) {
 			noteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
-			currentNote.ungraded = false;
-			this.piece.updateClapsForNoteAtIndex(this.playback.nextNote, this.tempo);
+			currentNote.graded = true;
+			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote, this.tempo);
 		}
 		
 		this.playback.nextNoteTime += currentNote.milliseconds(this.piece.timeSignature, this.tempo);
@@ -890,7 +1053,7 @@ class Player {
 		
 		if (noteElement && this.playback.nextNote > 0 && this.playback.nextNote < this.piece.notes.length) {
 			const nextNoteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
-			const scrollMargin = 80;
+			const scrollMargin = 100;
 			let newScrollPosition;
 			if (nextNoteElement === null) {
 				newScrollPosition = noteElement[0].offsetLeft;
