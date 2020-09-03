@@ -29,7 +29,20 @@ JGSW:
 + Hide key commands on phone
 + Show correct counts under the music on graded notes; color the ones that line up with notes & give them the same tooltips as the notes
 + Add a "Tap" button
-- Grade beats, coloring beats in the counting
++ Refactor timing & grading into `MusicEvent`
+    + Get timing out of `Note`
+    + Move `MusicEvent`s off of `Note` and into a separate `Piece.events` array
+    + Get grading out of `Player`... and `Piece`
+        + You'll probably need to make `Piece.events` into a custom class to do this
++ Grade beats, coloring beats in the counting
++ Make tooltips mention both beats and notes
+- Grade beats when beats occur
+    - Is it now time to experiment with `window.requestAnimationFrame()`?
+- Fix your spacing code to properly use the barline at the end of the measure as beat 1 instead of the first note of the next measure
+- Add "extra beat" just like "extra clap"
+- Fix spacing bug: it seems that offscreen objects don't work with your count/clap placement code.
+    - Is this your fault or a limitation of the browser?
+    - Can you use `div`s instead of `span`s for your notes, and if so, can you position relative to them?
 - Add a final score summary that appears after the piece is finished
 - Create a guided review of mistakes, suggested in the final score summary
 - Create an option to practice a level at a slower tempo

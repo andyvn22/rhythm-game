@@ -150,5 +150,5 @@ function clap() {
 };
 
 function tap() {
-    
+    player.gradeTap();
 }

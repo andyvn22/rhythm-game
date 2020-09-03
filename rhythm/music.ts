@@ -16,7 +16,7 @@ function assertionFailure(message = "Assertion failed: unreachable code"): never
  * An event (like a note or beat), whose timing is specified in absolute beats from the start of a piece
  */
 class MusicEvent {
-	/** The absolute time (in beats) of the event, since the start of the piece */
+	/** The absolute time (in beats) of the event, since the start of a piece */
 	timing: number;
 
 	/** Whether or not this event's performance attempts should be graded */
@@ -77,11 +77,102 @@ class MusicEvent {
 
 	correctness(tempo: number) {
 		assert(tempo > 0);
-		if (this.bestPerformanceAttempt === null) { return null; }
+		if (this.bestPerformanceAttempt === null) { return 0; }
 		return Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0);
 	}
 
+	/** Returns the offsets to all whole-numbered beats that occur before `length` is over, as well as the start of this event itself (always `0`) */
+	offsetsToBeatsForLength(length: number) {
+		assert(length > 0);
+		
+		let result = [0];
+		for (let i = Math.ceil(this.timing); i < this.timing + length; i++) {
+			result.push(i - this.timing);
+		}
+		return result;
+	}
+
 	static readonly timingThreshold = 200; //ms
+}
+
+/**
+ * An ordered collection of `MusicEvent`s
+ */
+class EventList {
+	private value: Array<MusicEvent>
+
+	/** Creates a new list of the specified events. The given events must be in chronological order. */
+	constructor(events: Array<MusicEvent>) {
+		this.value = events;
+	}
+
+	index(index: number) {
+		assert(index >= 0);
+		assert(index < this.value.length);
+
+		return this.value[index];
+	}
+
+	/** Returns the index of the last `MusicEvent` that occurs before `time` */
+	lastIndexBefore(time: number) {
+		assert(this.value.length > 0);
+
+		let result = -1;
+
+		while(result < this.value.length - 1) {
+			result++;
+			if (this.value[result].timing > time) {
+				return result - 1;
+			}
+		}
+
+		return result;
+	}
+
+	/** Grades the given `attemptTime`, calling `addPerformanceAttempt()` on the appropriate `MusicEvent`. Returns all modified indices (which may be more than one due to adjusting earlier guesses). */
+	gradePerformanceAttempt(attemptTime: number) {
+		assert(this.value.length > 0);
+
+		let closestIndex = -1;
+		let offset = Infinity;
+		while(closestIndex < this.value.length - 1) {
+			closestIndex++;
+			if (Math.abs(attemptTime - this.value[closestIndex].timing) > Math.abs(offset)) {
+				closestIndex--;
+				break;
+			} else {
+				offset = attemptTime - this.value[closestIndex].timing;
+			}
+		}
+
+		let result: Array<number> = [closestIndex];
+
+		if (closestIndex > 0) {
+			const previousNoteHasNoAttempt = this.value[closestIndex - 1].bestPerformanceAttempt === null;
+			const thisNoteAlreadyHasAttempt = this.value[closestIndex].bestPerformanceAttempt !== null;
+			if (previousNoteHasNoAttempt && thisNoteAlreadyHasAttempt) {
+				this.value[closestIndex - 1].addPerformanceAttempt(this.value[closestIndex].removeEarliestPerformanceAttempt()!);
+				result.push(closestIndex - 1);
+			}
+		}
+		this.value[closestIndex].addPerformanceAttempt(offset);
+		
+		return result;
+	}
+
+	removeGrading() {
+		for (let i = 0; i < this.value.length; i++) {
+			this.value[i].removeAllPerformanceAttempts();
+			this.value[i].graded = false;
+		}
+	}
+
+	enableGradingBefore(time: number) {
+		for (let event of this.value) {
+			if (event.timing >= time) { return; }
+			event.graded = true;
+		}
+	}
 }
 
 type NoteTypeName = 1 | 2 | 4 | 8 | 16;
@@ -161,12 +252,6 @@ class Note {
 	customPrefix: string;
 	customSuffix: string;
 	sound: string;
-	/**
-	 * Guaranteed to exist for any note inside of a `Piece`, this is the 0-indexed measure-relative timing of the start of the note. (For example, a note on the and of two would have `timing == 1.5`.)
-	 */
-	timing?: number;
-	graded = false;
-	private clapAttempts: Array<number> = [];
 
 	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = "metronome") {
 		assert(dots >= 0 && dots <= 2);
@@ -224,10 +309,6 @@ class Note {
 		return this.absoluteLength / other.absoluteLength;
 	}
 
-	milliseconds(timeSignature: TimeSignature, tempo: number) {
-		return this.relativeLength(timeSignature.bottom) * Player.beatLength(tempo);
-	}
-
 	get undotted() {
 		return new Note(this.type, 0, this.customPrefix, this.customSuffix, this.sound);
 	}
@@ -253,70 +334,7 @@ class Note {
 		return new Note(this.type, this.dots);
 	}
 
-	get bestClapTiming() {
-		if (this.clapAttempts.length == 0) { return null; }
-		return this.clapAttempts[0];
-	}
-	
-	get extraClaps() {
-		if (this.clapAttempts.length == 0) { return []; }
-		return this.clapAttempts.slice(1);
-	}
-
-	addClap(offset: number) {
-		const clapTimingSort = function(a: number, b: number) {
-			if (Math.abs(a) < Math.abs(b)) { return -1; }
-			else if (Math.abs(a) > Math.abs(b)) { return 1; }
-			else { return 0; }
-		}
-
-		this.clapAttempts.push(offset);
-		this.clapAttempts.sort(clapTimingSort);
-	}
-
-	removeEarliestClap() {
-		if (this.clapAttempts.length == 0) { return null; }
-
-		let indexOfEarliestClap = 0;
-		for (let i = 1; i < this.clapAttempts.length; i++) {
-			if (this.clapAttempts[i] < this.clapAttempts[indexOfEarliestClap]) {
-				indexOfEarliestClap = i;
-			}
-		}
-
-		const result = this.clapAttempts[indexOfEarliestClap];
-		this.clapAttempts.splice(indexOfEarliestClap, 1);
-		return result;
-	}
-
-	removeAllClaps() {
-		this.clapAttempts = [];
-	}
-
-	correctness(tempo: number) {
-		assert(tempo > 0);
-
-		if (this.bestClapTiming === null) {
-			return null;
-		} else {
-			return Math.max(1 - (Math.abs(this.bestClapTiming * Player.beatLength(tempo)) / Note.timingThreshold), 0);
-		}
-	}
-
-	countings(timeSignature: TimeSignature) {
-		if (this.timing === undefined) { assertionFailure(); }
-
-		let result = [0];
-		for (let i = 0; i < timeSignature.top; i++) {
-			if (i > this.timing && i < this.timing + this.relativeLength(timeSignature.bottom)) {
-				result.push(i - this.timing);
-			}
-		}
-		return result;
-	}
-
 	static readonly dotCharacter = ".";
-	static readonly timingThreshold = 200; //in milliseconds, so we have higher standards at slower tempos
 
 	static dots(count: number) {
 		assert(count >= 0);
@@ -335,27 +353,26 @@ enum Verbosity {
 }
 
 /**
- * A description of a given timing
+ * A description of a given musical timing
  */
 class TimingDescription {
 	readonly count: Count;
+	/** The beat this timing occurs on, 0-indexed from the start of the measure */
 	readonly beat: number;
 	readonly precision: TimingPrecision;
 
 	constructor(count: Count, beat: number, precision: TimingPrecision) {
-		assert(beat >= 0);
 		this.count = count;
 		this.beat = beat;
 		this.precision = precision;
 	}
 
+	/** Creates a timing description of the given absolute `timing` in the given `timeSignature` */
 	static of(timing: number, timeSignature: TimeSignature, counts: Array<Count>, tempo = 90) {
-		assert(timing >= 0);
-		assert(timing < timeSignature.top, "Timing: " + timing);
 		assert(tempo > 0);
 
 		let beat = Math.floor(timing);
-		const fractionalTiming = timing - beat;
+		let fractionalTiming = timing - beat;
 
 		let closestCount = Count.beat;
 		for (let count of counts) {
@@ -365,7 +382,8 @@ class TimingDescription {
 		}
 		if (Math.abs(1 - fractionalTiming) < Math.abs(closestCount.timing - fractionalTiming)) {
 			closestCount = Count.beat;
-			beat = (beat + 1) % timeSignature.top;
+			beat++;
+			fractionalTiming = 1 - fractionalTiming;
 		}
 
 		if (closestCount.isEqual(Count.and) && timeSignature.isCompound) {
@@ -376,13 +394,17 @@ class TimingDescription {
 
 		let offset = (closestCount.timing - fractionalTiming) * Player.beatLength(tempo);
 		let precision: TimingPrecision = "on";
-		if (offset > Note.timingThreshold) {
+		if (offset > MusicEvent.timingThreshold) {
 			precision = "a little after";
-		} else if (offset < -Note.timingThreshold) {
+		} else if (offset < -MusicEvent.timingThreshold) {
 			precision = "a little before";
 		}
 
-		return new TimingDescription(closestCount, beat, precision);
+		const negativeModulo = function(lhs: number, rhs: number) {
+			return ((lhs % rhs) + rhs) % rhs;
+		}
+
+		return new TimingDescription(closestCount, negativeModulo(beat, timeSignature.top), precision);
 	}
 
 	get shortBeatDescription() {
@@ -397,7 +419,7 @@ class TimingDescription {
 		if (this.count.isEqual(Count.beat)) {
 			switch (verbosity) {
 				case Verbosity.short: return `<strong>${this.shortBeatDescription}</strong>`;
-				default: return `<strong>${this.longBeatDescription}</strong>`;
+				default: return `${this.precision} <strong>${this.longBeatDescription}</strong>`;
 			}
 		} else {
 			switch (verbosity) {
@@ -548,12 +570,10 @@ class TimeSignature {
 		return new Piece(this, result);
 	}
 
-	measuresOfBeats(measures: number) {
-		let result: Array<Note> = [];
-		for (let i = 0; i < measures * this.top; i++) {
-			result.push(this.bottom.normalized);
-		}
-		return result;
+	milliseconds(notes: Array<Note>, tempo: number) {
+		assert(tempo > 0);
+
+		return notes.reduce((a,b) => a + b.relativeLength(this.bottom) * Player.beatLength(tempo), 0);
 	}
 
 	toString() {
@@ -566,16 +586,6 @@ class TimeSignature {
 		const denominator = this.bottom.dots === 0 ? this.bottom.type.rawValue : this.bottom.type.rawValue * 2;
 		assert(denominator <= 16);
 		return TimeSignature.prefix + TimeSignature.topCharacter(numerator as TimeSignatureTop) + TimeSignature.bottomCharacter(denominator as NoteTypeName) + TimeSignature.suffix;
-	}
-
-	offsetTiming(timing: number, offset: number) {
-		let result = timing + offset;
-		if (result < 0) {
-			result = this.top + result;
-		} else if (result >= this.top) {
-			result -= this.top;
-		}
-		return result;
 	}
 
 	static readonly prefix = '<span class="timeSignature">';
@@ -658,6 +668,9 @@ class Block {
 class Piece {
 	readonly timeSignature: TimeSignature;
 	readonly notes: Array<Note>;
+	/** Events corresponding to each of the `notes`, as well as one final end-of-piece event */
+	readonly noteEvents: EventList;
+	readonly beatEvents: EventList;
 
 	/** A unique ID for this piece, usable to look up generated notation as HTML elements. */
 	pieceID?: string;
@@ -666,11 +679,19 @@ class Piece {
 		this.timeSignature = timeSignature;
 		this.notes = notes.map(x => x.copy());
 		
+		let noteEvents: Array<MusicEvent> = [new MusicEvent(0)];
 		let timing = 0;
 		for (let note of this.notes) {
-			note.timing = timing % timeSignature.top
 			timing += note.relativeLength(timeSignature.bottom);
+			noteEvents.push(new MusicEvent(timing));
 		}
+		this.noteEvents = new EventList(noteEvents);
+
+		let beatEvents: Array<MusicEvent> = [];
+		for (let beat = 0; beat <= timing; beat++) {
+			beatEvents.push(new MusicEvent(beat));
+		}
+		this.beatEvents = new EventList(beatEvents);
 	}
 
 	static randomWithBlocks(blocks: Array<Block>, timeSignature: TimeSignature, measures: number) {
@@ -708,9 +729,9 @@ class Piece {
 	}
 
 	removeGrading() {
+		this.noteEvents.removeGrading();
+		this.beatEvents.removeGrading();
 		for (let i = 0; i < this.notes.length; i++) {
-			this.notes[i].removeAllClaps();
-			this.notes[i].graded = false;
 			this.updateAppearanceOfNoteAtIndex(i);
 		}
 	}
@@ -815,7 +836,16 @@ class Piece {
 				const positionXDistance = nextElement.position().left - noteXPosition;
 				const fraction = offset / totalLength;
 				return fraction * positionXDistance;
+			} else if (noteIndex > 0) {
+				//estimate using previous note as a guide
+				const previousIndex = noteIndex - 1;
+				const previousElement = $("#" + this.idForNoteIndex(previousIndex));
+				const totalLength = this.notes[noteIndex].relativeLength(this.timeSignature.bottom);
+				const positionXDistance = noteXPosition - previousElement.position().left;
+				const fraction = offset / totalLength;
+				return fraction * positionXDistance;
 			} else {
+				//give up
 				return 0;
 			}
 		}
@@ -830,25 +860,36 @@ class Piece {
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
 
-		const note = this.notes[noteIndex];
-		if (note.timing === undefined) { assertionFailure(); }
+		const event = this.noteEvents.index(noteIndex);
 
 		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
 		
-		let tooltipContent = `<div>This note is ${TimingDescription.of(note.timing, this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`;
+		let tooltipContent = `<div>This note is ${TimingDescription.of(event.timing, this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`;
 		
-		if (!note.graded) {
+		if (!event.graded) {
 			noteElement.css("color","black");
 		} else {
-			const hue = Piece.hueForCorrectness(note.correctness(tempo) ?? 0);
+			const hue = Piece.hueForCorrectness(event.correctness(tempo));
 
-			if (note.bestClapTiming === null) {
-				tooltipContent += `<div style="color: hsl(0,80%,40%)">You didn't clap near it.</div>`;
+			if (event.bestPerformanceAttempt === null) {
+				tooltipContent += `<div style="color: hsl(0,80%,40%)">You didn't clap near it</div>`;
 			} else {
-				tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You clapped ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, note.bestClapTiming), this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`;
+				tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You clapped ${TimingDescription.of(event.timing + event.bestPerformanceAttempt, this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`;
 			}
 
 			noteElement.css("color", `hsl(${hue},80%,40%)`);
+		}
+
+		if (event.timing === Math.floor(event.timing)) {
+			let beatEvent = this.beatEvents.index(event.timing);
+			if (beatEvent.graded) {
+				const hue = Piece.hueForCorrectness(beatEvent.correctness(tempo));
+				if (beatEvent.bestPerformanceAttempt === null) {
+					tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You didn't tap ${TimingDescription.of(beatEvent.timing, this.timeSignature, Count.all, tempo).description(Verbosity.medium)}</div>`;
+				} else {
+					tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You tapped ${TimingDescription.of(beatEvent.timing + beatEvent.bestPerformanceAttempt, this.timeSignature, Count.all, tempo).description(Verbosity.medium)}</div>`;
+				}
+			}
 		}
 		
 		noteElement.tooltip({
@@ -865,16 +906,16 @@ class Piece {
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
 		
-		const note = this.notes[noteIndex];
-		if (note.timing === undefined) { assertionFailure(); }
+		const event = this.noteEvents.index(noteIndex);
+		if (event === undefined) { assertionFailure(); }
 		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
 
 		const extraClapClass = this.idForNoteIndex(noteIndex) + "-extraClap";
 		noteElement.parent().children("." + extraClapClass).remove();
 
-		if (!note.graded || note.extraClaps.length == 0) { return; }
+		if (!event.graded || event.extraPerformanceAttempts.length == 0) { return; }
 
-		for (let extraClap of note.extraClaps) {
+		for (let extraClap of event.extraPerformanceAttempts) {
 			const position = this.positionOffsetFromNoteIndex(extraClap, noteIndex);
 			const extraClapElement = $(`<div class="extraClap ${extraClapClass}" title="">Extra clap<br/>❗️</div>`);
 			noteElement.parent().append(extraClapElement);
@@ -886,7 +927,7 @@ class Piece {
 				within: noteElement.parent()
 			})
 			extraClapElement.tooltip({
-				content: `<div style="color: hsl(0,80%,40%)">You added a clap ${TimingDescription.of(this.timeSignature.offsetTiming(note.timing, extraClap), this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`
+				content: `<div style="color: hsl(0,80%,40%)">You added a clap ${TimingDescription.of(event.timing + extraClap, this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`
 			});
 		}
 	}
@@ -897,20 +938,33 @@ class Piece {
 		assert(noteIndex < this.notes.length);
 		
 		const note = this.notes[noteIndex];
-		if (note.timing === undefined) { assertionFailure(); }
+		const noteEvent = this.noteEvents.index(noteIndex);
 		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
 
 		const countingClass = this.idForNoteIndex(noteIndex) + "-counting";
 		noteElement.parent().children("." + countingClass).remove();
 
-		if (!note.graded) { return; }
+		if (!noteEvent.graded) { return; }
 
-		for (let relativeCounting of note.countings(this.timeSignature)) {
-			const absoluteCounting = this.timeSignature.offsetTiming(note.timing, relativeCounting);
+		for (let relativeCounting of noteEvent.offsetsToBeatsForLength(note.relativeLength(this.timeSignature.bottom))) {
+			const absoluteCounting = noteEvent.timing + relativeCounting;
 			const position = this.positionOffsetFromNoteIndex(relativeCounting, noteIndex);
-			const hue = Piece.hueForCorrectness(note.correctness(tempo) ?? 0);
-			const color = (Math.floor(absoluteCounting) === absoluteCounting) ? `black` : `hsl(${hue},80%,40%)`;
-			const countingElement = $(`<div style="color: ${color}" class="counting ${countingClass}" title="">${TimingDescription.of(absoluteCounting, this.timeSignature, Count.all, tempo).description(Verbosity.short)}&nbsp;&nbsp;</div>`);
+
+			let noteCorrectness = 1;
+			let beatCorrectness = 1;
+			let tooltipContent: string;
+			if (absoluteCounting === Math.floor(absoluteCounting)) {
+				const beatEvent = this.beatEvents.index(absoluteCounting);
+				beatCorrectness = beatEvent.correctness(tempo);
+				if (!beatEvent.graded) { return; }
+			}
+
+			if (relativeCounting === 0) {
+				noteCorrectness = noteEvent.correctness(tempo);
+			}
+
+			const hue = Piece.hueForCorrectness(Math.min(noteCorrectness, beatCorrectness));
+			const countingElement = $(`<div style="color: hsl(${hue},80%,40%)" class="counting ${countingClass}" title="">${TimingDescription.of(absoluteCounting, this.timeSignature, Count.all, tempo).description(Verbosity.short)}&nbsp;&nbsp;</div>`);
 			noteElement.parent().append(countingElement);
 			countingElement.position({
 				my: "right bottom",
@@ -922,10 +976,20 @@ class Piece {
 
 			if (relativeCounting === 0) {
 				const noteElement = $("#" + this.idForNoteIndex(noteIndex));
-				countingElement.tooltip({
-					content: noteElement.tooltip("option", "content")
-				});
+				tooltipContent = noteElement.tooltip("option", "content");
+			} else {
+				const beatEvent = this.beatEvents.index(absoluteCounting);
+
+				if (beatEvent.bestPerformanceAttempt === null) {
+					tooltipContent = `<div style="color: hsl(${hue},80%,40%)">You didn't tap ${TimingDescription.of(beatEvent.timing, this.timeSignature, Count.all, tempo).description(Verbosity.medium)}</div>`;
+				} else {
+					tooltipContent = `<div style="color: hsl(${hue},80%,40%)">You tapped ${TimingDescription.of(beatEvent.timing + beatEvent.bestPerformanceAttempt, this.timeSignature, Count.all, tempo).description(Verbosity.medium)}</div>`;
+				}
 			}
+
+			countingElement.tooltip({
+				content: tooltipContent
+			});
 		}
 	}
 
@@ -939,7 +1003,6 @@ class Piece {
 interface Playback {
 	startTime: number;
 	nextNote: number;
-	nextNoteTime: number;
 }
 
 /**
@@ -954,9 +1017,7 @@ class Player {
 	}
 
 	tempo: number;
-	/**
-	 * Called when the player finishes playback.
-	 */
+	/** Called when the player finishes playback. */
 	callback: () => void;
 
 	private playback?: Playback;
@@ -981,8 +1042,8 @@ class Player {
 		const playerElement = $("#" + this.piece.idForNoteIndex(0));
 		playerElement.parent().scrollLeft(0);
 		
-		const now = Date.now();
-		this.playback = { startTime: now, nextNoteTime: now, nextNote: countOff ? 0 - this.piece.timeSignature.countoff.notes.length : 0 };
+		const delayUntilStart = countOff ? this.piece.timeSignature.milliseconds(this.piece.timeSignature.countoff.notes, this.tempo) : 0;
+		this.playback = { startTime: Date.now() + delayUntilStart, nextNote: (countOff ? -this.piece.timeSignature.countoff.notes.length : 0) };
 		this.piece.showTooltips(false);
 		this.playNote();
 	}
@@ -1000,40 +1061,38 @@ class Player {
 
 	gradeClap() {
 		if (this.isCountingOff || !this.isPlaying) { return; }
-		if (this.piece === undefined) { return; }
-		if (this.playback === undefined) { return; }
+		if (this.playback === undefined) { assertionFailure(); }
 
-		const clapTime = Date.now();
-		
-		const offsetToNextNote = this.playback.nextNote == this.piece.notes.length ? Infinity : clapTime - this.playback.nextNoteTime;
-		const offsetToPreviousNote = this.playback.nextNote == 0 ? Infinity : clapTime - (this.playback.nextNoteTime - this.piece.notes[this.playback.nextNote-1].milliseconds(this.piece.timeSignature, this.tempo));
-		
-		let closestNote, offset;
-		if (Math.abs(offsetToNextNote) < Math.abs(offsetToPreviousNote)) {
-			closestNote = this.playback.nextNote;
-			offset = offsetToNextNote;
-		} else {
-			closestNote = this.playback.nextNote - 1;
-			offset = offsetToPreviousNote;
+		const clapTime = (Date.now() - this.playback.startTime) / Player.beatLength(this.tempo);
+
+		const affectedIndices = this.piece.noteEvents.gradePerformanceAttempt(clapTime);
+		for (let i of affectedIndices) {
+			this.piece.updateAppearanceOfNoteAtIndex(i, this.tempo);
 		}
-		
-		if (closestNote > 0) {
-			const previousNoteHasNoClap = this.piece.notes[closestNote - 1].bestClapTiming === null;
-			const thisNoteAlreadyHasClap = this.piece.notes[closestNote].bestClapTiming !== null;
-			if (previousNoteHasNoClap && thisNoteAlreadyHasClap) {
-				this.piece.notes[closestNote - 1].addClap(this.piece.notes[closestNote].removeEarliestClap() as number);
-				this.piece.updateAppearanceOfNoteAtIndex(closestNote - 1, this.tempo);
-			}
+	}
+
+	gradeTap() {
+		if (this.isCountingOff || !this.isPlaying) { return; }
+		if (this.playback === undefined) { assertionFailure(); }
+
+		const tapTime = (Date.now() - this.playback.startTime) / Player.beatLength(this.tempo);
+		const affectedIndices = this.piece.beatEvents.gradePerformanceAttempt(tapTime);
+		for (let i of affectedIndices) {
+			const noteIndex = this.piece.noteEvents.lastIndexBefore(this.piece.beatEvents.index(i).timing);
+			console.log(`${noteIndex} before beat ${this.piece.beatEvents.index(i).timing} at index ${i}`);
+			this.piece.updateAppearanceOfNoteAtIndex(noteIndex, this.tempo);
 		}
-		this.piece.notes[closestNote].addClap(offset / Player.beatLength(this.tempo));
-		this.piece.updateAppearanceOfNoteAtIndex(closestNote, this.tempo);
 	}
 
 	private playNote() {
 		if (this.piece === undefined) { return; }
 		if (this.playback === undefined) { return; }
 
-		if (this.playback.nextNote >= this.piece.notes.length) { this.stop(); }
+		if (this.playback.nextNote >= this.piece.notes.length) {
+			this.piece.beatEvents.enableGradingBefore(this.piece.noteEvents.index(this.piece.notes.length).timing);
+			this.piece.updateAppearanceOfNoteAtIndex(this.piece.notes.length - 1);
+			this.stop();
+		}
 		if (!this.isPlaying) { return; }
 		
 		const currentNote = this.isCountingOff ? this.piece.timeSignature.countoff.notes[this.playback.nextNote + this.piece.timeSignature.countoff.notes.length] : this.piece.notes[this.playback.nextNote];
@@ -1044,27 +1103,39 @@ class Player {
 		let noteElement = null;
 		if (!this.isCountingOff) {
 			noteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
-			currentNote.graded = true;
+			this.piece.noteEvents.index(this.playback.nextNote).graded = true;
+			if (this.playback.nextNote > 0) {
+				this.piece.beatEvents.enableGradingBefore(this.piece.noteEvents.index(this.playback.nextNote).timing)
+				this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1, this.tempo);
+			}
 			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote, this.tempo);
 		}
 		
-		this.playback.nextNoteTime += currentNote.milliseconds(this.piece.timeSignature, this.tempo);
 		this.playback.nextNote += 1;
+		let nextNoteTime: number;
+		if (this.isCountingOff) {
+			const countoffIndex = this.playback.nextNote + this.piece.timeSignature.countoff.notes.length;
+			const remainingCountoff = this.piece.timeSignature.countoff.notes.slice(countoffIndex);
+			const remainingTime = this.piece.timeSignature.milliseconds(remainingCountoff, this.tempo);
+			nextNoteTime = this.playback.startTime - remainingTime;
+		} else {
+			nextNoteTime = this.playback.startTime + (this.piece.noteEvents.index(this.playback.nextNote).timing * Player.beatLength(this.tempo));
+		}
 		
 		if (noteElement && this.playback.nextNote > 0 && this.playback.nextNote < this.piece.notes.length) {
 			const nextNoteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
-			const scrollMargin = 100;
+			const scrollMargin = 400;
 			let newScrollPosition;
 			if (nextNoteElement === null) {
 				newScrollPosition = noteElement[0].offsetLeft;
 			} else {
 				newScrollPosition = nextNoteElement[0].offsetLeft;
 			}
-			noteElement.parent().animate({ scrollLeft: newScrollPosition - scrollMargin }, this.playback.nextNoteTime - Date.now());
+			noteElement.parent().animate({ scrollLeft: newScrollPosition - scrollMargin }, nextNoteTime - Date.now());
 		}
 		
 		var self = this;
-		window.setTimeout(function() { self.playNote(); }, this.playback.nextNoteTime - Date.now());
+		window.setTimeout(function() { self.playNote(); }, nextNoteTime - Date.now());
 	}
 
 	static beatLength(tempo: number) {

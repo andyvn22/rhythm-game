@@ -8,7 +8,7 @@ class Level {
     readonly piece: Piece;
     readonly tempo: number;
 
-    constructor(name: string, piece: Piece, tempo = 90) {
+    constructor(name: string, piece: Piece, tempo = 80) {
         this.name = name;
         this.piece = piece;
         this.tempo = tempo;
@@ -70,8 +70,7 @@ class Level {
                     new Block([Note.whole]),
                     new Block([Note.half]),
                     new Block([Note.quarter]),
-                    new Block([Note.eighth, Note.eighth]),
-                    new Block([Note.eighth, Note.quarter, Note.eighth])
+                    new Block([Note.half.dotted])
                 ];
                 return new Level("Random Level", Piece.randomWithBlocks(blocks, TimeSignature.fourFour, 8));
             }
