@@ -12,6 +12,11 @@ function assertionFailure(message = "Assertion failed: unreachable code"): never
 	throw message;
 }
 
+/** Converts from vw (hundredths of viewport width) to pixels */
+function vw(vw: number) {
+	return Math.round(vw * document.documentElement.clientWidth / 100);
+}
+
 /**
  * An event (like a note or beat), whose timing is specified in absolute beats from the start of a piece
  */
@@ -113,6 +118,12 @@ class EventList {
 		return this.value[index];
 	}
 
+	get last() {
+		assert(this.value.length > 0);
+
+		return this.value[this.value.length - 1];
+	}
+
 	/** Returns the index of the last `MusicEvent` that occurs before `time` */
 	lastIndexBefore(time: number) {
 		assert(this.value.length > 0);
@@ -167,9 +178,9 @@ class EventList {
 		}
 	}
 
-	enableGradingBefore(time: number) {
+	enableGradingThrough(time: number) {
 		for (let event of this.value) {
-			if (event.timing >= time) { return; }
+			if (event.timing > time) { return; }
 			event.graded = true;
 		}
 	}
@@ -524,7 +535,7 @@ class TimeSignature {
 		this.bottom = bottom;
 	}
 
-	static get twoFour() { return new TimeSignature(3, Note.quarter); }
+	static get twoFour() { return new TimeSignature(2, Note.quarter); }
 	static get threeFour() { return new TimeSignature(3, Note.quarter); }
 	static get fourFour() { return new TimeSignature(4, Note.quarter); }
 	static get fiveFour() { return new TimeSignature(5, Note.quarter); }
@@ -542,12 +553,10 @@ class TimeSignature {
 
 	get countoff() {
 		let result = [];
-		while (result.length < 2) {
-			for (var i = 0; i < (this.top <= 2 ? this.top : this.top - 2); i++) {
-				let count = this.bottom.normalized;
-				count.sound = (i+1).toString();
-				result.push(count);
-			}
+		for (var i = 0; i < (this.top <= 2 ? this.top : this.top - 2); i++) {
+			let count = this.bottom.normalized;
+			count.sound = (i+1).toString();
+			result.push(count);
 		}
 		
 		let rea, dy;
@@ -679,11 +688,11 @@ class Piece {
 		this.timeSignature = timeSignature;
 		this.notes = notes.map(x => x.copy());
 		
-		let noteEvents: Array<MusicEvent> = [new MusicEvent(0)];
+		let noteEvents: Array<MusicEvent> = [];
 		let timing = 0;
 		for (let note of this.notes) {
-			timing += note.relativeLength(timeSignature.bottom);
 			noteEvents.push(new MusicEvent(timing));
+			timing += note.relativeLength(timeSignature.bottom);
 		}
 		this.noteEvents = new EventList(noteEvents);
 
@@ -704,6 +713,10 @@ class Piece {
 		}
 
 		return new Piece(timeSignature, result);
+	}
+
+	get end() {
+		return this.noteEvents.last.timing + this.notes[this.notes.length-1].relativeLength(this.timeSignature.bottom);
 	}
 
 	get maxNoteType() {
@@ -805,45 +818,49 @@ class Piece {
 		return result + Piece.finalBarlineCharacter;
 	}
 
+	private metricsForIndices(startIndex: number, endIndex: number) {
+		assert(startIndex >= 0);
+		assert(startIndex < this.notes.length);
+		assert(endIndex >= 0);
+		assert(endIndex < this.notes.length);
+
+		const startElement = $("#" + this.idForNoteIndex(startIndex));
+		const endElement = $("#" + this.idForNoteIndex(endIndex));
+		
+		const earlierIndex = Math.min(startIndex, endIndex);
+		const laterIndex = Math.max(startIndex, endIndex);
+		const nearBarline = this.noteEvents.index(laterIndex).timing % this.timeSignature.top == 0;
+		const beatLength = this.notes[earlierIndex].relativeLength(this.timeSignature.bottom) + (nearBarline ? 1 : 0);
+		const pixelOffset = endElement.position().left - startElement.position().left;
+
+		return {beatLength: beatLength, pixelOffset: pixelOffset, nearBarline: nearBarline};
+	}
+
 	/**
 	 * Converts a beat offset from a note into a pixel offset from a note HTML element
 	 * @param offset The beat offset to convert
 	 * @param noteIndex The index of the note to offset from
 	 */
-	positionOffsetFromNoteIndex(offset: number, noteIndex: number) {
+	private positionOffsetFromNoteIndex(offset: number, noteIndex: number) {
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
 
-		const noteElement = $("#" + this.idForNoteIndex(noteIndex));
-		const noteXPosition = noteElement.position().left;
-
 		if (offset < 0) {
 			if (noteIndex > 0) {
-				const previousIndex = noteIndex - 1;
-				const previousElement = $("#" + this.idForNoteIndex(previousIndex));
-				const totalLength = this.notes[previousIndex].relativeLength(this.timeSignature.bottom);
-				const positionXDistance = noteXPosition - previousElement.position().left;
-				const fraction = offset / totalLength;
-				return fraction * positionXDistance;
+				const metrics = this.metricsForIndices(noteIndex, noteIndex - 1);
+				const fraction = (offset - (metrics.nearBarline ? 1 : 0)) / metrics.beatLength;
+				return fraction * -metrics.pixelOffset;
 			} else {
 				return 0;
 			}
 		} else {
 			if (noteIndex < this.notes.length - 1) {
-				const nextIndex = noteIndex + 1;
-				const nextElement = $("#" + this.idForNoteIndex(nextIndex));
-				const totalLength = this.notes[noteIndex].relativeLength(this.timeSignature.bottom);
-				const positionXDistance = nextElement.position().left - noteXPosition;
-				const fraction = offset / totalLength;
-				return fraction * positionXDistance;
+				const metrics = this.metricsForIndices(noteIndex, noteIndex + 1);
+				return (offset / metrics.beatLength) * metrics.pixelOffset;
 			} else if (noteIndex > 0) {
 				//estimate using previous note as a guide
-				const previousIndex = noteIndex - 1;
-				const previousElement = $("#" + this.idForNoteIndex(previousIndex));
-				const totalLength = this.notes[noteIndex].relativeLength(this.timeSignature.bottom);
-				const positionXDistance = noteXPosition - previousElement.position().left;
-				const fraction = offset / totalLength;
-				return fraction * positionXDistance;
+				const metrics = this.metricsForIndices(noteIndex, noteIndex - 1);
+				return (offset / metrics.beatLength) * -metrics.pixelOffset;
 			} else {
 				//give up
 				return 0;
@@ -921,9 +938,9 @@ class Piece {
 			noteElement.parent().append(extraClapElement);
 			extraClapElement.position({
 				my: "center top",
-				at: `center+${position} top+20`,
+				at: `left+${position} top+${vw(1.25)}`,
 				of: noteElement,
-				collision: "fit",
+				collision: "none",
 				within: noteElement.parent()
 			})
 			extraClapElement.tooltip({
@@ -964,11 +981,11 @@ class Piece {
 			}
 
 			const hue = Piece.hueForCorrectness(Math.min(noteCorrectness, beatCorrectness));
-			const countingElement = $(`<div style="color: hsl(${hue},80%,40%)" class="counting ${countingClass}" title="">${TimingDescription.of(absoluteCounting, this.timeSignature, Count.all, tempo).description(Verbosity.short)}&nbsp;&nbsp;</div>`);
+			const countingElement = $(`<div style="color: hsl(${hue},80%,40%)" class="counting ${countingClass}" title="">&nbsp;${TimingDescription.of(absoluteCounting, this.timeSignature, Count.all, tempo).description(Verbosity.short)}</div>`);
 			noteElement.parent().append(countingElement);
 			countingElement.position({
-				my: "right bottom",
-				at: `center+${position} bottom-40`,
+				my: "left bottom",
+				at: `left+${position} bottom-${vw(2)}`,
 				of: noteElement,
 				collision: "fit",
 				within: noteElement.parent()
@@ -1045,7 +1062,9 @@ class Player {
 		const delayUntilStart = countOff ? this.piece.timeSignature.milliseconds(this.piece.timeSignature.countoff.notes, this.tempo) : 0;
 		this.playback = { startTime: Date.now() + delayUntilStart, nextNote: (countOff ? -this.piece.timeSignature.countoff.notes.length : 0) };
 		this.piece.showTooltips(false);
+
 		this.playNote();
+		requestAnimationFrame(() => this.update());
 	}
 
 	/**
@@ -1067,6 +1086,7 @@ class Player {
 
 		const affectedIndices = this.piece.noteEvents.gradePerformanceAttempt(clapTime);
 		for (let i of affectedIndices) {
+			if (i == this.piece.notes.length) { continue; }
 			this.piece.updateAppearanceOfNoteAtIndex(i, this.tempo);
 		}
 	}
@@ -1079,9 +1099,20 @@ class Player {
 		const affectedIndices = this.piece.beatEvents.gradePerformanceAttempt(tapTime);
 		for (let i of affectedIndices) {
 			const noteIndex = this.piece.noteEvents.lastIndexBefore(this.piece.beatEvents.index(i).timing);
-			console.log(`${noteIndex} before beat ${this.piece.beatEvents.index(i).timing} at index ${i}`);
 			this.piece.updateAppearanceOfNoteAtIndex(noteIndex, this.tempo);
 		}
+	}
+
+	private update() {
+		if (!this.isPlaying) { return; }
+		if (this.playback === undefined) { assertionFailure(); }
+
+		this.piece.beatEvents.enableGradingThrough((Date.now() - this.playback.startTime) / Player.beatLength(this.tempo));
+		if (this.playback.nextNote > 0 && this.playback.nextNote <= this.piece.notes.length) {
+			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1);
+		}
+
+		requestAnimationFrame(() => this.update());
 	}
 
 	private playNote() {
@@ -1089,7 +1120,7 @@ class Player {
 		if (this.playback === undefined) { return; }
 
 		if (this.playback.nextNote >= this.piece.notes.length) {
-			this.piece.beatEvents.enableGradingBefore(this.piece.noteEvents.index(this.piece.notes.length).timing);
+			this.piece.beatEvents.enableGradingThrough(this.piece.end);
 			this.piece.updateAppearanceOfNoteAtIndex(this.piece.notes.length - 1);
 			this.stop();
 		}
@@ -1105,7 +1136,7 @@ class Player {
 			noteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
 			this.piece.noteEvents.index(this.playback.nextNote).graded = true;
 			if (this.playback.nextNote > 0) {
-				this.piece.beatEvents.enableGradingBefore(this.piece.noteEvents.index(this.playback.nextNote).timing)
+				this.piece.beatEvents.enableGradingThrough(this.piece.noteEvents.index(this.playback.nextNote).timing)
 				this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1, this.tempo);
 			}
 			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote, this.tempo);
@@ -1118,13 +1149,15 @@ class Player {
 			const remainingCountoff = this.piece.timeSignature.countoff.notes.slice(countoffIndex);
 			const remainingTime = this.piece.timeSignature.milliseconds(remainingCountoff, this.tempo);
 			nextNoteTime = this.playback.startTime - remainingTime;
+		} else if (this.playback.nextNote == this.piece.notes.length) {
+			nextNoteTime = this.playback.startTime + (this.piece.end * Player.beatLength(this.tempo));
 		} else {
 			nextNoteTime = this.playback.startTime + (this.piece.noteEvents.index(this.playback.nextNote).timing * Player.beatLength(this.tempo));
 		}
 		
 		if (noteElement && this.playback.nextNote > 0 && this.playback.nextNote < this.piece.notes.length) {
 			const nextNoteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
-			const scrollMargin = 400;
+			const scrollMargin = vw(20);
 			let newScrollPosition;
 			if (nextNoteElement === null) {
 				newScrollPosition = noteElement[0].offsetLeft;

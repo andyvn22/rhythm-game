@@ -65,14 +65,31 @@ class Level {
                 return new Level("5/4 Easy Level", piece);
             }
 
-            case "randomTest": {
+            case "randomEasy": {
                 const blocks = [
                     new Block([Note.whole]),
                     new Block([Note.half]),
                     new Block([Note.quarter]),
-                    new Block([Note.half.dotted])
+                    new Block([Note.half.dotted]),
+                    new Block([Note.eighth, Note.eighth]),
+                    new Block([Note.quarter.dotted, Note.eighth])
                 ];
-                return new Level("Random Level", Piece.randomWithBlocks(blocks, TimeSignature.fourFour, 8));
+                return new Level("Random Easy Level", Piece.randomWithBlocks(blocks, TimeSignature.threeFour, 8));
+            }
+
+            case "randomHard": {
+                const blocks = [
+                    new Block([Note.whole]),
+                    new Block([Note.half]),
+                    new Block([Note.quarter]),
+                    new Block([Note.half.dotted]),
+                    new Block([Note.eighth, Note.eighth]),
+                    new Block([Note.quarter.dotted, Note.eighth]),
+                    new Block([Note.eighth, Note.sixteenth, Note.sixteenth]),
+                    new Block([Note.sixteenth, Note.sixteenth, Note.eighth]),
+                    new Block([Note.sixteenth, Note.sixteenth, Note.sixteenth, Note.sixteenth])
+                ];
+                return new Level("Random Hard Level", Piece.randomWithBlocks(blocks, TimeSignature.fiveFour, 8));
             }
 
             default: assertionFailure("unknown level!");
