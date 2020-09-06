@@ -1,27 +1,38 @@
 /// <reference path="music.ts" />
 
 /**
- * Records the progress made on a particular skill.
+ * Records the progress made on a particular skill. Automatically calls `Profile.update()` when modified.
  */
 class SkillState {
     readonly id: string;
-    currentLevel: number;
+    private _currentLevel: number;
+    get currentLevel() { return this._currentLevel; }
+    set currentLevel(newValue) {
+        this._currentLevel = newValue;
+        Profile.update();
+    }
 
     constructor(id: string, currentLevel = 0) {
         this.id = id;
-        this.currentLevel = currentLevel;
+        this._currentLevel = currentLevel;
     }
 }
 
 /**
- * Tracks all state of a player's progress through the game.
+ * Tracks all state of a player's progress through the game. Automatically calls `Profile.update()` when modified.
  */
 class Profile {
-    name: string;
+    private _name: string;
+    get name() { return this._name; }
+    set name(newValue) {
+        this._name = newValue;
+        Profile.update();
+    }
+
     private skills: Array<SkillState>;
 
     constructor(name = "", skills: Array<SkillState> = []) {
-        this.name = name;
+        this._name = name;
         this.skills = skills;
     }
 
@@ -65,27 +76,68 @@ class Profile {
     get hasName() {
         return this.name.trim() !== "";
     }
+    
+    /*****************************/
+    /* Static Properties/Methods */
+    /*****************************/
 
-    static all: Array<Profile>;
-    static currentIndex: number;
+    private static all: Array<Profile>;
+    private static _currentIndex: number;
+    static onUpdate = function() {};
+
+    static get currentIndex() { return this._currentIndex; }
+    static set currentIndex(newValue) {
+        this._currentIndex = newValue;
+        this.update();
+    }
     static get current() { return Profile.all[Profile.currentIndex]; }
+
+    static add(profile: Profile) {
+        this.all.push(profile);
+        this._currentIndex = Profile.all.length - 1;
+        this.update();
+    }
+
+    static removeCurrent() {
+        if (this.all.length === 1) { this.all.push(new Profile("")); }
+        this.all.splice(this.currentIndex, 1);
+        this.currentIndex = 0;
+
+        this.update();
+    }
+
+    static each(action: (index: number, profile: Profile) => void) {
+        for (let i = 0; i < this.all.length; i++) {
+            action(i, this.all[i]);
+        }
+    }
 
     static loadAllFromStorage() {
         const profileCodes = localStorage.getItem("rhythmGame-allProfiles")?.split("\n").slice(0,-1) ?? [];
         Profile.all = profileCodes.map(x => Profile.decode(x));
-        Profile.currentIndex = parseInt(localStorage.getItem("rhythmGame-currentProfileIndex") ?? "0");
+        Profile._currentIndex = parseInt(localStorage.getItem("rhythmGame-currentProfileIndex") ?? "0");
 
         if (Profile.all.length === 0) { Profile.all.push(new Profile()); }
-        if (Profile.currentIndex >= Profile.all.length) { Profile.currentIndex = 0; }
+        if (Profile._currentIndex >= Profile.all.length) { Profile._currentIndex = 0; }
+
+        this.update();
     }
 
-    static saveAllToStorage() {
+    private static saveAllToStorage() {
         let result = "";
         for (let profile of Profile.all) {
             result += profile.encode() + "\n";
         }
         localStorage.setItem("rhythmGame-allProfiles", result);
         localStorage.setItem("rhythmGame-currentProfileIndex", Profile.currentIndex.toString());
+    }
+
+    /**
+     * Saves all state to local storage, and calls the `onUpdate` callback. Called automatically when modifying properties of `Profile`s and `SkillState`s.
+     */
+    static update() {
+        this.saveAllToStorage();
+        this.onUpdate();
     }
 }
 
@@ -114,6 +166,13 @@ class Skill {
     constructor(name: string, levels: Array<Level>) {
         this.name = name;
         this.levels = levels;
+    }
+
+    /** Returns true if and only if the skill represented by `id` has been completed by `Profile.current`. */
+    static isCompleted(id: string) {
+        const skill = Skill.forID(id);
+        const currentLevel = Profile.current.skillState(id).currentLevel;
+        return currentLevel >= skill.levels.length;
     }
 
     static forID(id: string): Skill {

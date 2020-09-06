@@ -822,88 +822,6 @@ class Piece {
 		};
 	}
 
-	showGradeSummary(player: Player) {
-		assert(player.tempo > 0);
-
-		function formatAccuracy(accuracy: number) {
-			const hue = Piece.hueForCorrectness(accuracy);
-			const percentage = Math.round(accuracy * 100) + "%";
-			return `<span style="color: hsl(${hue},80%,40%)">${percentage}</span>`;
-		}
-
-		function formatExtraPerformanceAttempts(extraPerformanceAttempts: number) {
-			const hue = Piece.hueForCorrectness(extraPerformanceAttempts == 0 ? 1 : 0);
-			return `<span style="color: hsl(${hue},80%,40%)">${extraPerformanceAttempts}</span>`;
-		}
-
-		function formatSummary(summary: string, passed: boolean) {
-			const hue = Piece.hueForCorrectness(passed ? 1 : 0);
-			const icon = passed ? "check" : "cancel";
-			return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
-		}
-
-		const gradingInfo = this.gradingInfo(player.tempo);
-		const summaryElement = `
-			<div id="gradeSummary" title="Let's See How You Did!">
-				<dl style="display: grid">
-					<dt style="grid-column: 1 / 2; grid-row: 2 / 3;">👏 Clap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 1 / 2;">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
-					<dt style="grid-column: 2 / 3; grid-row: 2 / 3;">👏 Extra claps</dt><dd style="grid-column: 2 / 3; grid-row: 1 / 2;">${formatExtraPerformanceAttempts(gradingInfo.extraClaps)}</dd>
-					<dt style="grid-column: 1 / 2; grid-row: 4 / 5;">🦶 Tap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 3 / 4;">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
-					<dt style="grid-column: 2 / 3; grid-row: 4 / 5;">🦶 Extra taps</dt><dd style="grid-column: 2 / 3; grid-row: 3 / 4;">${formatExtraPerformanceAttempts(gradingInfo.extraTaps)}</dd>
-				</dl>
-				${formatSummary(gradingInfo.summary, gradingInfo.passed)}
-			</div>
-		`;
-
-		let buttons = [{
-			text: "Review Performance",
-			icon: "ui-icon-search",
-			click: function() {
-				$(this).dialog("close");
-				player.rewind();
-			}
-		}];
-		if (gradingInfo.passed) {
-			buttons.push({
-				text: "Next Level!",
-				icon: "ui-icon-star",
-				click: function() {
-					location.href = "world.html";
-				}
-			});
-		} else {
-			buttons.push({
-				text: "Try Again",
-				icon: "ui-icon-refresh",
-				click: function() {
-					$(this).dialog("close");
-					player.play();
-				}
-			});
-		}
-
-		$(summaryElement).dialog({
-			modal: true,
-			width: Math.min(vw(80), em(50)),
-			buttons: buttons,
-			show: {
-				effect: "scale",
-				duration: 400
-			},
-			hide: {
-				effect: "fade",
-				duration: 600
-			},
-			beforeClose: function() { //Levels are never taller than the window, so if we're scrolled down, it's because of this dialog
-				$('html, body').animate({ scrollTop: 0 }, 600);
-			}
-		});
-
-		if (gradingInfo.passed) {
-			playSound("fanfare");
-		}
-	}
-
 	showTooltips(showTooltips: boolean) {
 		for (let i = 0; i < this.notes.length; i++) {
 			const noteElement = $("#" + this.idForNoteIndex(i));
@@ -1023,7 +941,7 @@ class Piece {
 		}
 	}
 
-	private static hueForCorrectness(correctness: number) {
+	static hueForCorrectness(correctness: number) {
 		return correctness * 125; //125°==green, 0°==red
 	}
 
@@ -1214,18 +1132,19 @@ class Player {
 
 	tempo: number;
 	/** Called when the player starts playback. */
-	onPlay: () => void;
+	onPlay = function() {};
 
-	/** Called when the player finishes playback. */
-	onStop: () => void;
+	/** Called when the player ceases playback, either by pausing early or by finishing the piece. */
+	onStop = function() {};
+
+	/** Called when the player successfully finishes the piece. */
+	onComplete = function() {};
 
 	private playback?: Playback;
 
-	constructor(piece: Piece, tempo = 90, onPlay = function() {}, onStop = function() {}) {
+	constructor(piece: Piece, tempo = 90) {
 		this._piece = piece;
 		this.tempo = tempo;
-		this.onPlay = onPlay;
-		this.onStop = onStop;
 	}
 
 	get isPlaying() { return this.playback !== undefined; }
@@ -1259,9 +1178,6 @@ class Player {
 	stop() {
 		if (!this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
-		if (this.playback.nextNote === this.piece.notes.length) {
-			this.piece.showGradeSummary(this);
-		}
 		this.playback = undefined;
 		this.piece.showTooltips(true);
 		this.onStop();
@@ -1322,6 +1238,7 @@ class Player {
 			this.piece.beatEvents.enableGradingThrough(this.piece.end);
 			this.piece.updateAppearanceOfNoteAtIndex(this.piece.notes.length - 1);
 			this.stop();
+			this.onComplete();
 		}
 		if (!this.isPlaying) { return; }
 		

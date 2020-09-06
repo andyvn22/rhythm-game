@@ -653,12 +653,11 @@ button.ui-button::-moz-focus-inner {
 	top: -5px;
 }
 .ui-progressbar {
-	height: 2em;
+	height: 1em;
 	text-align: left;
 	overflow: hidden;
 }
 .ui-progressbar .ui-progressbar-value {
-	margin: -1px;
 	height: 100%;
 }
 .ui-progressbar .ui-progressbar-overlay {

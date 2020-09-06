@@ -43,11 +43,14 @@ JGSW:
 + Refactor `gameData.ts` to add `Skill`, which will have a list of `Level`s--by index, not ID (we'll now do `level.html?skill=something&level=0`)
 + Display levels list when clicking a skill, linking to each level
 + Test browser-local storage by allowing a name change
-- Make browser-local storage saves automatic & allow for registering callbacks
-- Use browser-local storage to save current level for each skill
-- Disable levels within each skill that are past current
-- Show progress bars in skills
-- Disable entire skills based on requirements
++ Make browser-local storage saves automatic & allow for registering callbacks
++ Use browser-local storage to save current level for each skill
+    + Disable levels within each skill that are past current
+    + Alter current level when passing one
+    + Show progress bars in skills
+    + Style skills: completed, current, locked (oof, that's a LOT of CSS...)
+    + Disable entire skills based on requirements
+- Refactor `gameData.ts`--I think `Skill` needs to know its own `id` for most reasonable uses.
 - Rests
 - Alter scoring so that notes with low scores pull the average down a lot, and notes with high scores don't pull it down much at all
 - Fix block system so it can disallow larger blocks from crossing certain boundaries (e.g. eighth/quarter/eighth syncopation starting on beat 2 of common time)
@@ -56,6 +59,9 @@ JGSW:
     - Next, can you let some blocks be required, so that a random piece will be forced to use one of each required block?
 - Cool background music to help keep beat
 - Add cool animations
+    - Something for right/wrong notes while playing
+    - Something for celebrating when you complete a skill/unlock a new one
+    - Anything else you can think of
 - Browser local storage for progress?
 - Can you store all player progress in a URL? This could allow switching devices!
 - Accounts saved on server? based on hash of email; switching accounts on main page

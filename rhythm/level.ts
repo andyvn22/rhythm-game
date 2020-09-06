@@ -1,18 +1,14 @@
 /// <reference path="gameData.ts" />
 
-let level = new Level("No Level!", new Piece(TimeSignature.commonTime));
+const params = new URLSearchParams(location.search);
+let skillID = params.get("skill")!;
+let levelIndex = parseInt(params.get("level")!);
+
+let level = Skill.forID(skillID).levels[levelIndex];
 let player = new Player(level.piece, level.tempo);
 player.onPlay = function() { play(); }
 player.onStop = function() { stop(); }
-
-function loadLevel() {
-    const params = new URLSearchParams(location.search);
-    level = Skill.forID(params.get("skill")!).levels[parseInt(params.get("level")!)];
-    $("h1").text(level.name);
-    document.title = level.name;
-    player.piece = level.piece;
-    displayPiece();
-}
+player.onComplete = function() { showGradeSummary(); }
 
 function isMobile() {
     return navigator.userAgent.match(/Mobi/);
@@ -32,7 +28,104 @@ jQuery.fn.extend({
     }
 });
 
+function showGradeSummary() {
+    assert(player.tempo > 0);
+
+    function formatAccuracy(accuracy: number) {
+        const hue = Piece.hueForCorrectness(accuracy);
+        const percentage = Math.round(accuracy * 100) + "%";
+        return `<span style="color: hsl(${hue},80%,40%)">${percentage}</span>`;
+    }
+
+    function formatExtraPerformanceAttempts(extraPerformanceAttempts: number) {
+        const hue = Piece.hueForCorrectness(extraPerformanceAttempts == 0 ? 1 : 0);
+        return `<span style="color: hsl(${hue},80%,40%)">${extraPerformanceAttempts}</span>`;
+    }
+
+    function formatSummary(summary: string, passed: boolean) {
+        const hue = Piece.hueForCorrectness(passed ? 1 : 0);
+        const icon = passed ? "check" : "cancel";
+        return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
+    }
+
+    const gradingInfo = player.piece.gradingInfo(player.tempo);
+    const summaryElement = `
+        <div id="gradeSummary" title="Let's See How You Did!">
+            <dl style="display: grid">
+                <dt style="grid-column: 1 / 2; grid-row: 2 / 3;">👏 Clap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 1 / 2;">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
+                <dt style="grid-column: 2 / 3; grid-row: 2 / 3;">👏 Extra claps</dt><dd style="grid-column: 2 / 3; grid-row: 1 / 2;">${formatExtraPerformanceAttempts(gradingInfo.extraClaps)}</dd>
+                <dt style="grid-column: 1 / 2; grid-row: 4 / 5;">🦶 Tap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 3 / 4;">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
+                <dt style="grid-column: 2 / 3; grid-row: 4 / 5;">🦶 Extra taps</dt><dd style="grid-column: 2 / 3; grid-row: 3 / 4;">${formatExtraPerformanceAttempts(gradingInfo.extraTaps)}</dd>
+            </dl>
+            ${formatSummary(gradingInfo.summary, gradingInfo.passed)}
+        </div>
+    `;
+
+    let buttons = [{
+        text: "Grade Details",
+        icon: "ui-icon-search",
+        click: function() {
+            $(this).dialog("close");
+            player.rewind();
+        }
+    }];
+    if (gradingInfo.passed) {
+        buttons.push({
+            text: "Next Level!",
+            icon: "ui-icon-star",
+            click: exitLevel
+        });
+    } else {
+        buttons.push({
+            text: "Try Again",
+            icon: "ui-icon-refresh",
+            click: function() {
+                $(this).dialog("close");
+                player.play();
+            }
+        });
+    }
+
+    $(summaryElement).dialog({
+        modal: true,
+        width: Math.min(vw(80), em(50)),
+        buttons: buttons,
+        show: {
+            effect: "scale",
+            duration: 400
+        },
+        hide: {
+            effect: "fade",
+            duration: 600
+        },
+        beforeClose: function() { //Levels are never taller than the window, so if we're scrolled down, it's because of this dialog
+            $('html, body').animate({ scrollTop: 0 }, 600);
+        }
+    });
+
+    if (gradingInfo.passed) {
+        playSound("fanfare");
+    }
+}
+
+function exitLevel() {
+    if (Skill.isCompleted(skillID)) {
+        location.href = "world.html";
+    } else {
+        location.href = `world.html?skill=${skillID}`;
+    }
+}
+
 $(document).ready(function() {
+    Profile.loadAllFromStorage();
+
+    $("#exitButton").button({
+        label: "Exit Level",
+        icons: { primary: "ui-icon-home" }
+    }).on("click", function() {
+        exitLevel();
+    });
+
     $("#play").button({
         label: "<strong>Play</strong>",
         icons: { primary: "ui-icon-play" }
@@ -73,7 +166,10 @@ $(document).ready(function() {
         multiplay: true
     });
 
-    loadLevel();
+    $("h1").text(level.name);
+    document.title = level.name;
+    displayPiece();
+    showGradeSummary();
 });
 
 $(document).keydown(function(event) {
@@ -142,6 +238,12 @@ function stop() {
     });
     $("#clap").button("option", "disabled", true);
     $("#tap").button("option", "disabled", true);
+
+    if (player.piece.gradingInfo(player.tempo).passed) {
+        if (Profile.current.skillState(skillID).currentLevel === levelIndex) {
+            Profile.current.skillState(skillID).currentLevel = levelIndex + 1;
+        }
+    }
 }
 
 function clap() {

@@ -28,14 +28,20 @@
             position: relative;
 		}
 
-        #requirements {
+        #requirements, #requirements-disabled {
             position: absolute;
             left: 0;
             top: 0;
             width: 100%; /* height set in JS */
             z-index: -1000;
+        }
 
+        #requirements {
             filter: drop-shadow(1px 1px 4px black);
+        }
+
+        #requirements-disabled {
+            filter: drop-shadow(1px 1px 4px gray);
         }
 
         #skillTree {
@@ -51,18 +57,20 @@
             padding: 2em;
         }
 
+        /**********/
+        /* Skills */
+        /**********/
+
         .skill {
             width: 7em;
+            height: 6em;
             padding: 1em 0.2em;
-            border-radius: 1em;
-            border: 2px solid white;
+            border-width: 3px;
+            border-style: solid;
             box-shadow: 0.2em 0.2em 0.6em black;
-
-            background: linear-gradient(to bottom right, #D8BF93, #7C2F2F);
 
             text-align: center;
             font-weight: bold;
-            color: white;
 			text-shadow: -0.1em -0.1em 0.2em white, 0.1em 0.1em 0.2em black;
 
             display: flex;
@@ -72,21 +80,65 @@
             cursor: pointer;
         }
 
-        .skill:hover {
-            background: linear-gradient(to bottom right, #dfcfb5, #915252);
-        }
-
-        .skill-open, .skill-open:hover {
-            background: linear-gradient(to top left, #D8BF93, #7C2F2F);
+        .skill-open {
 			text-shadow: 0.1em 0.1em 0.2em white, -0.1em -0.1em 0.2em black;
         }
+
+        .skill-completed {
+            border-color: #dbcfb5;
+            color: #fff1c6;
+            background: linear-gradient(to bottom right, #cfc09f 0%,#ffecb3 25%,#3a2c0f 100%);
+        }
+
+        .skill-completed:hover {
+            background: linear-gradient(to bottom right, #dbcfb5 0%,#fff1c6 25%,#4b3a19 100%);
+        }
+
+        .skill-completed.skill-open, .skill-completed.skill-open:hover {
+            background: linear-gradient(to top left, #cfc09f 0%,#ffecb3 25%,#3a2c0f 100%);
+        }
+
+        .skill-current {
+            border-color: white;
+            color: white;
+            background: linear-gradient(to bottom right, #9fa6cf 0%,#080052 100%);
+        }
+
+        .skill-current:hover {
+            background: linear-gradient(to bottom right, #a8aed4 0%,#13096d 100%);
+        }
+
+        .skill-current.skill-open, .skill-current.skill-open:hover {
+            background: linear-gradient(to top left, #9fa6cf 0%,#080052 100%);
+        }
+
+        .skill.skill-locked {
+            border-color: rgb(230, 230, 230);
+            color: rgb(243, 243, 243);
+            background: rgb(216, 216, 216);
+            text-shadow: none;
+            box-shadow: 0.2em 0.2em 0.6em rgb(172, 172, 172);
+        }
+
+        /*****************/
+        /* Skill Details */
+        /*****************/
 
         .skillDetails {
             font-size: 0.9em;
         }
 
         .skillDetails h2 {
-            font-size: 1em;
+            font-size: 1.4em;
+            font-weight: 200;
+        }
+
+        .skillDetails.skillDetails-locked h2 {
+            color: rgb(156, 156, 156);
+        }
+
+        .skillDetails.skillDetails-completed h2 {
+            color: rgb(145, 122, 76);
         }
 
         .skillDetails ol {
@@ -95,15 +147,52 @@
         }
 
         .skillDetails a {
-            color: rgb(0, 0, 230);
             text-decoration: none;
         }
 
-        .skillDetails a:hover {
-            color: rgb(126, 126, 255);
+        .skillRequirementsList {
+            border: 2px dashed gray;
+            border-radius: 0.4em;
+            padding: 0.3em;
+            font-size: 0.9em;
         }
 
-        #profile {
+        .skillRequirementsList ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        /**************/
+        /* Level List */
+        /**************/
+        
+        .level-completed, .level-completed a {
+            color: rgb(145, 122, 76);
+        }
+
+        .level-completed:hover, .level-completed a:hover {
+            color: rgb(209, 188, 119);
+        }
+
+        .level-current, .level-current a {
+            color: rgb(21, 21, 221);
+            font-weight: bold;
+        }
+
+        .level-current:hover, .level-current a:hover {
+            color: rgb(173, 173, 255);
+        }
+
+        .level-locked {
+            color: rgb(156, 156, 156);
+        }
+
+        /******************/
+        /* Profile Editor */
+        /******************/
+
+        #profileButton {
             position: fixed;
             left: 1em;
             top: 1em;
@@ -133,18 +222,18 @@
 	
     <h1>World</h1>
 
-    <button id="profile"></button>
+    <button id="profileButton"></button>
     
     <div id="skillTree">
         <div class="row">
-            <div class="skill" id="randomEasy">Random Easy</div>
+            <div class="skill" id="randomEasy"></div>
         </div>
         <div class="row">
-            <div class="skill" id="fiveFourTest" data-requirement="randomEasy">5/4 Test</div>
-            <div class="skill" id="sixEightTest" data-requirement="randomEasy">Compound Test</div>
+            <div class="skill" id="fiveFourTest" data-requirement="randomEasy"></div>
+            <div class="skill" id="sixEightTest" data-requirement="randomEasy"></div>
         </div>
         <div class="row">
-            <div class="skill" id="randomHard" data-requirement="fiveFourTest">Random Hard</div>
+            <div class="skill" id="randomHard" data-requirement="fiveFourTest"></div>
         </div>
     </div>
 
