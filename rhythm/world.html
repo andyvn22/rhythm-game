@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width"/>
+	<title>Rhythm Game</title>
+	<link rel="stylesheet" href="include/jquery-ui.css"/>
+	<link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
+</head>
+<body>
+	<style>
+		*,
+		*:before,
+		*:after {
+			-webkit-box-sizing: border-box;
+			-moz-box-sizing: border-box;
+			box-sizing: border-box;
+		}
+		
+		html, body {
+			min-height: 100%;
+			text-align: center;
+
+			user-select: none;
+			-webkit-user-select: none;
+			cursor: default;
+
+            position: relative;
+		}
+
+        #requirements {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%; /* height set in JS */
+            z-index: -1000;
+
+            filter: drop-shadow(1px 1px 4px black);
+        }
+
+        #skillTree {
+            max-width: 70em;
+            margin: auto;
+            display: grid;
+            grid-auto-rows: 1fr;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-evenly;
+            padding: 2em;
+        }
+
+        .skill {
+            width: 7em;
+            padding: 1em 0.2em;
+            border-radius: 1em;
+            border: 2px solid white;
+            box-shadow: 0.2em 0.2em 0.6em black;
+
+            background: linear-gradient(to bottom right, #D8BF93, #7C2F2F);
+
+            text-align: center;
+            font-weight: bold;
+            color: white;
+			text-shadow: -0.1em -0.1em 0.2em white, 0.1em 0.1em 0.2em black;
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            cursor: pointer;
+        }
+
+        .skill:hover {
+            background: linear-gradient(to bottom right, #dfcfb5, #915252);
+        }
+
+        .skill-open, .skill-open:hover {
+            background: linear-gradient(to top left, #D8BF93, #7C2F2F);
+			text-shadow: 0.1em 0.1em 0.2em white, -0.1em -0.1em 0.2em black;
+        }
+
+        .skillDetails {
+            font-size: 0.9em;
+        }
+
+        .skillDetails h2 {
+            font-size: 1em;
+        }
+
+        .skillDetails ol {
+            text-align: left;
+            padding: 0 1.5em 0 3em;
+        }
+
+        .skillDetails a {
+            color: rgb(0, 0, 230);
+            text-decoration: none;
+        }
+
+        .skillDetails a:hover {
+            color: rgb(126, 126, 255);
+        }
+
+        #profile {
+            position: fixed;
+            left: 1em;
+            top: 1em;
+        }
+
+        fieldset {
+            margin-top: 2em;
+            border-radius: 1em;
+        }
+
+        #profileAddButton {
+            color: rgb(70, 224, 70);
+        }
+
+        #profileDeleteButton {
+            color: rgb(255, 58, 58);
+        }
+    </style>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>
+	<script src="include/jquery-1.12.2.min.js"></script>
+	<script src="include/jquery-ui.min.js"></script>
+	<script src="include/ion.sound.min.js"></script>
+	<script src="music.js"></script>
+	<script src="gameData.js"></script>
+
+	<script src="world.js"></script>
+	
+    <h1>World</h1>
+
+    <button id="profile"></button>
+    
+    <div id="skillTree">
+        <div class="row">
+            <div class="skill" id="randomEasy">Random Easy</div>
+        </div>
+        <div class="row">
+            <div class="skill" id="fiveFourTest" data-requirement="randomEasy">5/4 Test</div>
+            <div class="skill" id="sixEightTest" data-requirement="randomEasy">Compound Test</div>
+        </div>
+        <div class="row">
+            <div class="skill" id="randomHard" data-requirement="fiveFourTest">Random Hard</div>
+        </div>
+    </div>
+
+    <div id="profileDialog"></div>
+</body>
+</html>

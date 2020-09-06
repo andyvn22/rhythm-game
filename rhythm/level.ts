@@ -1,17 +1,13 @@
-/// <reference path="levels.ts" />
+/// <reference path="gameData.ts" />
 
 let level = new Level("No Level!", new Piece(TimeSignature.commonTime));
-let player = new Player(level.piece, level.tempo, function() { stop(); });
-
-function getURLParameter(name: string) {
-    name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
-    var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
-    var results = regex.exec(location.search);
-    return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
-};
+let player = new Player(level.piece, level.tempo);
+player.onPlay = function() { play(); }
+player.onStop = function() { stop(); }
 
 function loadLevel() {
-    level = Level.forID(getURLParameter("level"));
+    const params = new URLSearchParams(location.search);
+    level = Skill.forID(params.get("skill")!).levels[parseInt(params.get("level")!)];
     $("h1").text(level.name);
     document.title = level.name;
     player.piece = level.piece;
@@ -55,7 +51,8 @@ $(document).ready(function() {
     //@ts-ignore
     ion.sound({
         sounds: [
-            { name: "metronome", volume: 0.8 },
+            { name: "metronome" },
+            { name: "fanfare" },
             { name: "1" },
             { name: "2" },
             { name: "3" },
@@ -123,8 +120,10 @@ function togglePlayback() {
 };
 
 function play() {
+    if (!player.isPlaying) {
+        player.play();
+    }
     player.piece.removeGrading();
-    player.play();
     $("#play").button({
         label: "Stop",
         icons: { primary: "ui-icon-stop" }

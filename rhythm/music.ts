@@ -12,9 +12,19 @@ function assertionFailure(message = "Assertion failed: unreachable code"): never
 	throw message;
 }
 
+function playSound(sound: string) {
+	//@ts-ignore
+	ion.sound.play(sound);
+}
+
 /** Converts from vw (hundredths of viewport width) to pixels */
 function vw(vw: number) {
 	return Math.round(vw * document.documentElement.clientWidth / 100);
+}
+
+/** Converts from em to pixels, relative to the font size of the element `relativeTo`, or `document.body` if no element is given. */
+function em(em: number, relativeTo = document.body) {
+	return parseFloat(getComputedStyle(relativeTo).fontSize) * em;
 }
 
 /**
@@ -183,6 +193,15 @@ class EventList {
 			if (event.timing > time) { return; }
 			event.graded = true;
 		}
+	}
+
+	gradingInfo(tempo: number) {
+		assert(tempo > 0);
+
+		const accuracy = this.value.reduce((a,b) => a + b.correctness(tempo), 0) / this.value.length;
+		const extraPerformanceAttempts = this.value.reduce((a,b) => a + b.extraPerformanceAttempts.length, 0);
+
+		return {accuracy: accuracy, extraPerformanceAttempts: extraPerformanceAttempts};
 	}
 }
 
@@ -703,7 +722,7 @@ class Piece {
 		this.beatEvents = new EventList(beatEvents);
 	}
 
-	static randomWithBlocks(blocks: Array<Block>, timeSignature: TimeSignature, measures: number) {
+	static random(timeSignature: TimeSignature, measures: number, blocks: Array<Block>) {
 		assert(measures > 0);
 		const possibleMeasures = Block.allPossibleMeasuresFrom(blocks, timeSignature);
 
@@ -746,6 +765,142 @@ class Piece {
 		this.beatEvents.removeGrading();
 		for (let i = 0; i < this.notes.length; i++) {
 			this.updateAppearanceOfNoteAtIndex(i);
+		}
+	}
+
+	static passAccuracy = 0.65;
+	static stellarAccuracy = 0.85;
+	gradingInfo(tempo: number) {
+		assert(tempo > 0);
+		
+		const clapInfo = this.noteEvents.gradingInfo(tempo);
+		const tapInfo = this.beatEvents.gradingInfo(tempo);
+		let passed: boolean;
+		let summary: string;
+		if (clapInfo.accuracy < Piece.passAccuracy && tapInfo.accuracy < Piece.passAccuracy) {
+			passed = false;
+			summary = "This level needs more work. Keep practicing; you can do it!";
+		} else if (clapInfo.accuracy < Piece.passAccuracy && tapInfo.accuracy >= Piece.passAccuracy) {
+			passed = false;
+			if (tapInfo.extraPerformanceAttempts == 0) {
+				summary = "You're keeping the beat well with your taps, but focus on those claps! Keep working; you can do it!";
+			} else {
+				summary = "Good work keeping the beat, but be careful not to add extra taps. Let's also focus on clap accuracy; you can do this!";
+			}
+		} else if (clapInfo.accuracy >= Piece.passAccuracy && tapInfo.accuracy < Piece.passAccuracy) {
+			passed = false;
+			if (clapInfo.extraPerformanceAttempts == 0) {
+				summary = "Nice clap timing; you're reading those rhythms well! All that's left now is to keep a steady beat with your taps!"
+			} else {
+				summary = "Nice rhythm reading, but be careful not to add extra claps! Then, focus on keeping a steady beat with your taps and you'll have this!"
+			}
+		} else if (clapInfo.accuracy >= Piece.stellarAccuracy && tapInfo.accuracy >= Piece.stellarAccuracy && clapInfo.extraPerformanceAttempts == 0 && tapInfo.extraPerformanceAttempts == 0) {
+			passed = true;
+			summary = "Wow! You totally rocked that level; amazing job! See if you can do as well on the next!";
+		} else { //accuracy check passed
+			passed = clapInfo.extraPerformanceAttempts + tapInfo.extraPerformanceAttempts == 0;
+			if (clapInfo.extraPerformanceAttempts > 0 && tapInfo.extraPerformanceAttempts > 0) {
+				summary = "Nice accuracy! Next, eliminate those extra claps and taps and you'll be done with this one!";
+			} else if (clapInfo.extraPerformanceAttempts > 0) {
+				const extras = `${clapInfo.extraPerformanceAttempts == 1 ? "is" : "are"} ${clapInfo.extraPerformanceAttempts} extra clap${clapInfo.extraPerformanceAttempts == 1 ? "" : "s"}`;
+				summary = `Fantastic beat-keeping with your taps! All that's standing between you and finishing this level ${extras}!`;
+			} else if (tapInfo.extraPerformanceAttempts > 0) {
+				const extras = `${tapInfo.extraPerformanceAttempts == 1 ? "is" : "are"} ${tapInfo.extraPerformanceAttempts} extra tap${tapInfo.extraPerformanceAttempts == 1 ? "" : "s"}`;
+				summary = `Fantastic rhythm reading with your claps! All that's standing between you and being done with this level ${extras}!`;
+			} else {
+				summary = "What a great performance! You're done with this level; onto the next!"
+			}
+		}
+
+		return {
+			clapAccuracy: clapInfo.accuracy,
+			extraClaps: clapInfo.extraPerformanceAttempts,
+			tapAccuracy: tapInfo.accuracy,
+			extraTaps: tapInfo.extraPerformanceAttempts,
+			passed: passed,
+			summary: summary
+		};
+	}
+
+	showGradeSummary(player: Player) {
+		assert(player.tempo > 0);
+
+		function formatAccuracy(accuracy: number) {
+			const hue = Piece.hueForCorrectness(accuracy);
+			const percentage = Math.round(accuracy * 100) + "%";
+			return `<span style="color: hsl(${hue},80%,40%)">${percentage}</span>`;
+		}
+
+		function formatExtraPerformanceAttempts(extraPerformanceAttempts: number) {
+			const hue = Piece.hueForCorrectness(extraPerformanceAttempts == 0 ? 1 : 0);
+			return `<span style="color: hsl(${hue},80%,40%)">${extraPerformanceAttempts}</span>`;
+		}
+
+		function formatSummary(summary: string, passed: boolean) {
+			const hue = Piece.hueForCorrectness(passed ? 1 : 0);
+			const icon = passed ? "check" : "cancel";
+			return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
+		}
+
+		const gradingInfo = this.gradingInfo(player.tempo);
+		const summaryElement = `
+			<div id="gradeSummary" title="Let's See How You Did!">
+				<dl style="display: grid">
+					<dt style="grid-column: 1 / 2; grid-row: 2 / 3;">👏 Clap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 1 / 2;">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
+					<dt style="grid-column: 2 / 3; grid-row: 2 / 3;">👏 Extra claps</dt><dd style="grid-column: 2 / 3; grid-row: 1 / 2;">${formatExtraPerformanceAttempts(gradingInfo.extraClaps)}</dd>
+					<dt style="grid-column: 1 / 2; grid-row: 4 / 5;">🦶 Tap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 3 / 4;">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
+					<dt style="grid-column: 2 / 3; grid-row: 4 / 5;">🦶 Extra taps</dt><dd style="grid-column: 2 / 3; grid-row: 3 / 4;">${formatExtraPerformanceAttempts(gradingInfo.extraTaps)}</dd>
+				</dl>
+				${formatSummary(gradingInfo.summary, gradingInfo.passed)}
+			</div>
+		`;
+
+		let buttons = [{
+			text: "Review Performance",
+			icon: "ui-icon-search",
+			click: function() {
+				$(this).dialog("close");
+				player.rewind();
+			}
+		}];
+		if (gradingInfo.passed) {
+			buttons.push({
+				text: "Next Level!",
+				icon: "ui-icon-star",
+				click: function() {
+					location.href = "world.html";
+				}
+			});
+		} else {
+			buttons.push({
+				text: "Try Again",
+				icon: "ui-icon-refresh",
+				click: function() {
+					$(this).dialog("close");
+					player.play();
+				}
+			});
+		}
+
+		$(summaryElement).dialog({
+			modal: true,
+			width: Math.min(vw(80), em(50)),
+			buttons: buttons,
+			show: {
+				effect: "scale",
+				duration: 400
+			},
+			hide: {
+				effect: "fade",
+				duration: 600
+			},
+			beforeClose: function() { //Levels are never taller than the window, so if we're scrolled down, it's because of this dialog
+				$('html, body').animate({ scrollTop: 0 }, 600);
+			}
+		});
+
+		if (gradingInfo.passed) {
+			playSound("fanfare");
 		}
 	}
 
@@ -909,6 +1064,10 @@ class Piece {
 			}
 		}
 		
+		if (noteElement.tooltip("instance") !== undefined) {
+			noteElement.tooltip("destroy");
+		}
+		
 		noteElement.tooltip({
 			content: tooltipContent,
 			position: { my: "center top", at: "center bottom-30", collision: "fit" }
@@ -930,7 +1089,7 @@ class Piece {
 		const extraClapClass = this.idForNoteIndex(noteIndex) + "-extraClap";
 		noteElement.parent().children("." + extraClapClass).remove();
 
-		if (!event.graded || event.extraPerformanceAttempts.length == 0) { return; }
+		if (!event.graded) { return; }
 
 		for (let extraClap of event.extraPerformanceAttempts) {
 			const position = this.positionOffsetFromNoteIndex(extraClap, noteIndex);
@@ -938,7 +1097,7 @@ class Piece {
 			noteElement.parent().append(extraClapElement);
 			extraClapElement.position({
 				my: "center top",
-				at: `left+${position} top+${vw(1.25)}`,
+				at: `left+${position} top+${vw(1.5)}`,
 				of: noteElement,
 				collision: "none",
 				within: noteElement.parent()
@@ -961,6 +1120,9 @@ class Piece {
 		const countingClass = this.idForNoteIndex(noteIndex) + "-counting";
 		noteElement.parent().children("." + countingClass).remove();
 
+		const extraTapClass = this.idForNoteIndex(noteIndex) + "-extraTap";
+		noteElement.parent().children("." + extraTapClass).remove();
+
 		if (!noteEvent.graded) { return; }
 
 		for (let relativeCounting of noteEvent.offsetsToBeatsForLength(note.relativeLength(this.timeSignature.bottom))) {
@@ -974,6 +1136,23 @@ class Piece {
 				const beatEvent = this.beatEvents.index(absoluteCounting);
 				beatCorrectness = beatEvent.correctness(tempo);
 				if (!beatEvent.graded) { return; }
+
+				//Render extra taps
+				for (let extraTap of beatEvent.extraPerformanceAttempts) {
+					const position = this.positionOffsetFromNoteIndex(extraTap + beatEvent.timing - noteEvent.timing, noteIndex);
+					const extraTapElement = $(`<div class="extraTap ${extraTapClass}" title="">❗️<br/>Extra tap</div>`);
+					noteElement.parent().append(extraTapElement);
+					extraTapElement.position({
+						my: "center bottom",
+						at: `left+${position} bottom`,
+						of: noteElement,
+						collision: "none",
+						within: noteElement.parent()
+					})
+					extraTapElement.tooltip({
+						content: `<div style="color: hsl(0,80%,40%)">You added a tap ${TimingDescription.of(beatEvent.timing + extraTap, this.timeSignature, Count.all, tempo).description(Verbosity.long)}</div>`
+					});
+				}
 			}
 
 			if (relativeCounting === 0) {
@@ -985,7 +1164,7 @@ class Piece {
 			noteElement.parent().append(countingElement);
 			countingElement.position({
 				my: "left bottom",
-				at: `left+${position} bottom-${vw(2)}`,
+				at: `left+${position} bottom-${vw(2.5)}`,
 				of: noteElement,
 				collision: "fit",
 				within: noteElement.parent()
@@ -1034,15 +1213,19 @@ class Player {
 	}
 
 	tempo: number;
+	/** Called when the player starts playback. */
+	onPlay: () => void;
+
 	/** Called when the player finishes playback. */
-	callback: () => void;
+	onStop: () => void;
 
 	private playback?: Playback;
 
-	constructor(piece: Piece, tempo = 90, callback = function() {}) {
+	constructor(piece: Piece, tempo = 90, onPlay = function() {}, onStop = function() {}) {
 		this._piece = piece;
 		this.tempo = tempo;
-		this.callback = callback;
+		this.onPlay = onPlay;
+		this.onStop = onStop;
 	}
 
 	get isPlaying() { return this.playback !== undefined; }
@@ -1052,30 +1235,46 @@ class Player {
 		return this.isPlaying && this.playback.nextNote < 0;
 	}
 
+	/**
+	 * Begins playback, disabling tooltips on `piece` and calling `onPlay` if set. If already playing, does nothing.
+	 */
 	play(countOff = true) {
 		if (this.isPlaying) { return; }
 		if (this.piece === undefined) { return; }
 
-		const playerElement = $("#" + this.piece.idForNoteIndex(0));
-		playerElement.parent().scrollLeft(0);
+		this.piece.showTooltips(false);
+		this.rewind();
 		
 		const delayUntilStart = countOff ? this.piece.timeSignature.milliseconds(this.piece.timeSignature.countoff.notes, this.tempo) : 0;
 		this.playback = { startTime: Date.now() + delayUntilStart, nextNote: (countOff ? -this.piece.timeSignature.countoff.notes.length : 0) };
-		this.piece.showTooltips(false);
 
 		this.playNote();
 		requestAnimationFrame(() => this.update());
+		this.onPlay();
 	}
 
 	/**
-	 * Stops playback, re-enabling tooltips on `piece` and calling `callback` if set. If playback has already been stopped, does nothing.
+	 * Stops playback, re-enabling tooltips on `piece` and calling `onStop` if set. If playback has already been stopped, does nothing.
 	 */
 	stop() {
 		if (!this.isPlaying) { return; }
-		
+		if (this.playback === undefined) { assertionFailure(); }
+		if (this.playback.nextNote === this.piece.notes.length) {
+			this.piece.showGradeSummary(this);
+		}
 		this.playback = undefined;
 		this.piece.showTooltips(true);
-		this.callback();
+		this.onStop();
+	}
+
+	/**
+	 * Scrolls the player back to the start. You may only rewind while the player is stopped.
+	 */
+	rewind() {
+		assert(!this.isPlaying);
+
+		const playerElement = $("#" + this.piece.idForNoteIndex(0));
+		playerElement.parent().animate({ scrollLeft: 0 }, 1000);
 	}
 
 	gradeClap() {
@@ -1128,8 +1327,7 @@ class Player {
 		
 		const currentNote = this.isCountingOff ? this.piece.timeSignature.countoff.notes[this.playback.nextNote + this.piece.timeSignature.countoff.notes.length] : this.piece.notes[this.playback.nextNote];
 		
-		//@ts-ignore
-		ion.sound.play(currentNote.sound);
+		playSound(currentNote.sound);
 		
 		let noteElement = null;
 		if (!this.isCountingOff) {
