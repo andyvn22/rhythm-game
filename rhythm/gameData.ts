@@ -142,18 +142,147 @@ class Profile {
 }
 
 /**
- * A level in the game; consists primarily of a piece of music.
+ * Any kind of level in the game; subclasses can use different `page` values to have completely different gameplay.
  */
-class Level {
+abstract class AnyLevel {
     readonly name: string;
-    readonly piece: Piece;
-    readonly tempo: number;
+    /** The base name of the HTML page used to play this level */
+    readonly page: string;
+    readonly icon: string;
 
-    constructor(name: string, piece: Piece, tempo = 90) {
+    protected constructor(name: string, page: string, icon: string) {
         this.name = name;
-        this.piece = piece;
-        this.tempo = tempo;
+        this.page = page;
+        this.icon = icon;
     }
+
+    /** Returns a pseudo(-not-very-)random number between 0 and `upperBound`, which will always be the same for this level */
+    stablePseudorandomIntegerTo(upperBound: number) {
+        if (upperBound === 0) { return 0; }
+        var hash = 0, i, chr;
+        for (i = 0; i < this.name.length; i++) {
+            chr   = this.name.charCodeAt(i);
+            hash  = ((hash << 5) - hash) + chr;
+            hash |= 0; // Convert to 32bit integer
+        }
+        return Math.abs(hash) % upperBound;
+    }
+
+    /** Returns the index of the level the current page describes, or `undefined` if not on a level page */
+    static get currentIndex() {
+        const params = new URLSearchParams(location.search);
+        const result = params.get("level");
+        if (result === null) { return undefined; }
+        return parseInt(result);
+    }
+
+    /** Returns the level being displayed by the current page, or `undefined` if not on a level page */
+    static get current() {
+        const index = AnyLevel.currentIndex;
+        if (index === undefined) { return undefined; }
+        return Skill.current?.levels[index];
+    }
+
+    /** Sets up the current page as a level page, with appropriate title, header, and exit button. Also loads all `Profile`s. */
+    static initializePage() {
+        if (this.current === undefined) { assertionFailure(); }
+
+        Profile.loadAllFromStorage();
+
+        $("h1").text(this.current.name);
+        document.title = `${this.current.name} - Rhythm Game`;
+
+        const exitButton = $(`<div style="position: fixed; left: 1em; top: 1em; z-position: 1000;" id="exitButton"></div>`);
+        $(document.body).append(exitButton);
+        exitButton.button({
+            label: "Exit Level",
+            icons: { primary: "ui-icon-home" }
+        }).on("click", function() {
+            AnyLevel.exit();
+        });
+    }
+
+    /** Advances the unlocked level of the current skill by one; call only from a level page (when it's complete). */
+    static advance() {
+        if (Skill.current === undefined) { assertionFailure(); }
+        if (Profile.current.skillState(Skill.current.id).currentLevel === AnyLevel.currentIndex) {
+            Profile.current.skillState(Skill.current.id).currentLevel = AnyLevel.currentIndex + 1;
+        }
+    }
+
+    /** Exits the current level page, returning to the world. */
+    static exit() {
+        if (Skill.current == undefined || Skill.current.isCompleted) {
+            location.href = "world.html";
+        } else {
+            location.href = `world.html?skill=${Skill.current.id}`;
+        }
+    }
+}
+
+interface LevelConstructor {
+    name: string;
+    timeSignature: TimeSignature;
+    tempo?: Tempo;
+    knownCounts?: Array<Count>;
+    backingLoop?: number;
+}
+
+interface RandomLevelConstructor extends LevelConstructor {
+    bars: number;
+    blocks: Array<Block>;
+}
+
+interface ComposedLevelConstructor extends LevelConstructor {
+    notes: Array<Note>;
+}
+
+/**
+ * A normal level in the game; consists primarily of a piece of music to clap & count.
+ */
+class Level extends AnyLevel {
+    readonly piece: Piece;
+    readonly tempo: Tempo;
+    readonly knownCounts: Array<Count>;
+
+    constructor(data: RandomLevelConstructor | ComposedLevelConstructor) {
+        let piece: Piece;
+        let icon: string;
+
+        let randomData = data as RandomLevelConstructor;
+        let composedData = data as ComposedLevelConstructor;
+        if (randomData.bars !== undefined && randomData.blocks !== undefined) {
+            piece = Piece.random(randomData.timeSignature, randomData.bars, randomData.blocks, randomData.backingLoop);
+            icon = "shuffle";
+        } else if (composedData.notes !== undefined) {
+            piece = new Piece(composedData.timeSignature, composedData.notes, composedData.backingLoop);
+            icon = "volume-on";
+        } else {
+            assertionFailure();
+        }
+
+        super(data.name, "level", icon);
+
+        this.piece = piece;
+        this.tempo = data.tempo ?? 80;
+        this.knownCounts = data.knownCounts ?? Count.allExceptCompoundAdvanced;
+    }
+
+    static get current() { return AnyLevel.current as Level; }
+}
+
+/**
+ * An explanatory level that is automatically won just by reading it.
+ */
+class TextLevel extends AnyLevel {
+    readonly html: string;
+
+    constructor(name: string, html: string) {
+        super(name, "text", "comment");
+        this.html = html;
+    }
+
+    static get current() { return AnyLevel.current as TextLevel; }
 }
 
 /**
@@ -162,9 +291,9 @@ class Level {
 class Skill {
     readonly id: string;
     readonly name: string;
-    readonly levels: Array<Level>;
+    readonly levels: Array<AnyLevel>;
 
-    constructor(id: string, name: string, levels: Array<Level>) {
+    constructor(id: string, name: string, levels: Array<AnyLevel>) {
         this.id = id;
         this.name = name;
         this.levels = levels;
@@ -184,87 +313,180 @@ class Skill {
         return matches.length > 0 ? matches[0] : undefined;
     }
 
+    /** Returns the skill the current level page is inside, or `undefined` if not on a level page */
+    static get current() {
+        const params = new URLSearchParams(location.search);
+        const skillID = params.get("skill");
+        if (skillID === null) { return undefined; }
+        return Skill.forID(skillID);
+    }
+
     private static loadAll() {
         this.all.push(new Skill("sixEightTest", "6/8 Test", [
-            new Level("6/8 Test Level", new Piece(TimeSignature.sixEight, [
-                Note.quarter,
-                Note.eighth,
-                Note.eighth,
-                Note.sixteenth,
-                Note.sixteenth,
-                Note.eighth,
-                Note.eighth,
-                Note.quarter,
-                Note.quarter.dotted
-            ]))
+            new Level({
+                name: "6/8 Test Level",
+                timeSignature: TimeSignature.sixEight,
+                knownCounts: Count.allCompound,
+                tempo: 60,
+                notes: [
+                    Note.quarter,
+                    Note.eighth,
+                    Note.eighth,
+                    Note.sixteenth,
+                    Note.sixteenth,
+                    Note.eighth,
+                    Note.eighth,
+                    Note.quarter,
+                    Note.quarter.dotted
+                ]
+            })
         ]));
         
         this.all.push(new Skill("fiveFourTest", "5/4 Test", [
-            new Level("5/4 Test Level", new Piece(TimeSignature.fiveFour, [
-                Note.eighth,
-                Note.quarter,
-                Note.eighth,
-                Note.sixteenth,
-                Note.sixteenth,
-                Note.eighth,
-                Note.eighth.dotted,
-                Note.sixteenth,
-                Note.sixteenth,
-                Note.eighth,
-                Note.sixteenth
-            ])
-        )]));
+            new Level({
+                name: "5/4 Test Level",
+                timeSignature: TimeSignature.fiveFour,
+                knownCounts: Count.allSimple,
+                notes: [
+                    Note.eighth,
+                    Note.quarter,
+                    Note.eighth,
+                    Note.sixteenth,
+                    Note.sixteenth,
+                    Note.eighth,
+                    Note.eighth.dotted,
+                    Note.sixteenth,
+                    Note.sixteenth,
+                    Note.eighth,
+                    Note.sixteenth
+                ]
+            })
+        ]));
 
         this.all.push(new Skill("randomEasy", "Random Easy", [
-            new Level("First Some Long Notes", Piece.random(TimeSignature.fourFour, 8, [
-                new Block([Note.whole]),
-                new Block([Note.half]),
-                new Block([Note.quarter, Note.quarter]),
-                new Block([Note.half.dotted, Note.quarter])
-            ]), 90),
-            new Level("Eighth Note Pairs", Piece.random(TimeSignature.fourFour, 2, [
-                new Block([Note.whole]),
-                new Block([Note.half]),
-                new Block([Note.quarter]),
-                new Block([Note.half.dotted]),
-                new Block([Note.eighth, Note.eighth])
-            ])),
-            new Level("Aah, Syncopation!", Piece.random(TimeSignature.threeFour, 8, [
-                new Block([Note.whole]),
-                new Block([Note.half]),
-                new Block([Note.quarter]),
-                new Block([Note.half.dotted]),
-                new Block([Note.eighth, Note.eighth]),
-                new Block([Note.quarter.dotted, Note.eighth]),
-                new Block([Note.eighth, Note.quarter, Note.eighth])
-            ]))
+            new Level({
+                name: "First Some Long Notes",
+                timeSignature: TimeSignature.fourFour,
+                tempo: 100,
+                knownCounts: Count.allSimpleBasic,
+                backingLoop: 0,
+                bars: 8,
+                blocks: [
+                    new Block([Note.whole]),
+                    new Block([Note.half]),
+                    new Block([Note.quarter, Note.quarter]),
+                    new Block([Note.half.dotted, Note.quarter])
+                ]
+            }),
+            new Level({
+                name: "Eighth Note Pairs",
+                timeSignature: TimeSignature.fourFour,
+                tempo: 80,
+                knownCounts: Count.allSimpleBasic,
+                bars: 8,
+                blocks: [
+                    new Block([Note.whole]),
+                    new Block([Note.half]),
+                    new Block([Note.quarter]),
+                    new Block([Note.half.dotted]),
+                    new Block([Note.eighth, Note.eighth])
+                ]
+            }),
+            new Level({
+                name: "Aah, Syncopation!",
+                timeSignature: TimeSignature.fourFour,
+                tempo: 60,
+                knownCounts: Count.allSimpleBasic,
+                bars: 8,
+                blocks: [
+                    new Block([Note.whole]),
+                    new Block([Note.half]),
+                    new Block([Note.quarter]),
+                    new Block([Note.half.dotted]),
+                    new Block([Note.eighth, Note.eighth]),
+                    new Block([Note.quarter.dotted, Note.eighth], [0, 2]),
+                    new Block([Note.eighth, Note.quarter, Note.eighth], [0, 2])
+                ]
+            })
         ]));
 
         this.all.push(new Skill("randomHard", "Random Hard", [
-            new Level("Random Hard Level", Piece.random(TimeSignature.fiveFour, 8, [
-                new Block([Note.whole]),
-                new Block([Note.half]),
-                new Block([Note.quarter]),
-                new Block([Note.half.dotted]),
-                new Block([Note.eighth, Note.eighth]),
-                new Block([Note.quarter.dotted, Note.eighth]),
-                new Block([Note.eighth, Note.sixteenth, Note.sixteenth]),
-                new Block([Note.sixteenth, Note.sixteenth, Note.eighth]),
-                new Block([Note.sixteenth, Note.sixteenth, Note.sixteenth, Note.sixteenth])
-            ]))
+            new Level({
+                name: "Random Hard Level",
+                timeSignature: TimeSignature.fiveFour,
+                knownCounts: Count.allSimple,
+                bars: 8,
+                blocks: [
+                    new Block([Note.whole]),
+                    new Block([Note.half]),
+                    new Block([Note.quarter]),
+                    new Block([Note.half.dotted]),
+                    new Block([Note.eighth, Note.eighth]),
+                    new Block([Note.quarter.dotted, Note.eighth]),
+                    new Block([Note.eighth, Note.sixteenth, Note.sixteenth]),
+                    new Block([Note.sixteenth, Note.sixteenth, Note.eighth]),
+                    new Block([Note.sixteenth, Note.sixteenth, Note.sixteenth, Note.sixteenth])
+                ]
+            })
         ]));
 
         this.all.push(new Skill("rests", "Rests!", [
-            new Level("Rests!", new Piece(TimeSignature.commonTime, [
-                Rest.quarter,
-                Note.quarter,
-                Rest.eighth,
-                Note.eighth,
-                Note.quarter,
-                Rest.half,
-                Note.quarter,
-                Note.quarter
-            ]))
+            new Level({
+                name: "Rests!",
+                timeSignature: TimeSignature.commonTime,
+                knownCounts: Count.allSimpleBasic,
+                notes: [
+                    Rest.quarter,
+                    Note.quarter,
+                    Rest.eighth,
+                    Note.eighth,
+                    Note.quarter,
+                    Rest.half,
+                    Note.quarter,
+                    Note.quarter
+                ]
+            }),
+            new TextLevel("Let's Talk", `
+                <p>I'm here to <strong>strongly</strong> encourage you to read about <em>rests</em>!</p>
+            `),
+            new Level({
+                name: "Tricky Rest Countings",
+                timeSignature: TimeSignature.commonTime,
+                knownCounts: Count.allSimpleBasic,
+                notes: [
+                    Note.quarter,
+                    Note.eighth, Rest.eighth,
+                    Note.quarter,
+                    Rest.eighth, Note.eighth,
+                    Rest.half,
+                    Rest.eighth, Rest.quarter, Rest.eighth
+                ]
+            }),
+        ]));
+        
+        this.all.push(new Skill("sixteenths", "16th Notes", [
+            new Level({
+                name: "Every 16th Note Rhythm",
+                timeSignature: TimeSignature.commonTime,
+                knownCounts: Count.allSimple,
+                bars: 8,
+                blocks: [
+                    Block.required([Note.sixteenth, Note.sixteenth, Note.eighth]),
+                    Block.required([Note.eighth, Note.sixteenth, Note.sixteenth]),
+                    Block.required([Note.sixteenth, Note.sixteenth, Note.sixteenth, Note.sixteenth]),
+                    Block.required([Note.sixteenth, Note.eighth, Note.sixteenth]),
+                    new Block([Note.quarter]),
+                    new Block([Note.half]),
+                    new Block([Note.whole]),
+                    new Block([Note.eighth, Note.eighth]),
+                    new Block([Note.eighth, Note.quarter, Note.eighth], [0,2]),
+                    new Block([Note.quarter.dotted, Note.eighth], [0,2]),
+                    new Block([Note.half.dotted]),
+                    new Block([Rest.half]),
+                    new Block([Rest.quarter]),
+                    new Block([Rest.eighth, Note.eighth])
+                ]
+            })
         ]));
     }
 }

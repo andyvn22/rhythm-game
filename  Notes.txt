@@ -9,6 +9,7 @@ JGSW:
 + Scroll to where you are as it plays. I think there is a jQuery `scrollTop` property?
 + Count off before playing
 + Accept input & grade!!
+
 + Store offset info in fractions of a beat, so that you can...
     + create formatters for counts, and
     + add tooltips for details on timing!
@@ -27,6 +28,7 @@ JGSW:
 + Make tooltips click to show/hide on phone
     + AUTOMATIC! Thanks Safari for iOS and/or jQuery UI!
 + Hide key commands on phone
+
 + Show correct counts under the music on graded notes; color the ones that line up with notes & give them the same tooltips as the notes
 + Add a "Tap" button
 + Refactor timing & grading into `MusicEvent`
@@ -38,6 +40,7 @@ JGSW:
 + Make tooltips mention both beats and notes
 + Grade beats when beats occur
 + Add "extra beat" just like "extra clap"
+
 + Add a final score summary that appears after the piece is finished
 + Skill tree with requirement lines
 + Refactor `gameData.ts` to add `Skill`, which will have a list of `Level`s--by index, not ID (we'll now do `level.html?skill=something&level=0`)
@@ -51,6 +54,7 @@ JGSW:
     + Style skills: completed, current, locked (oof, that's a LOT of CSS...)
     + Disable entire skills based on requirements
 + Refactor `gameData.ts`--I think `Skill` needs to know its own `id` for most reasonable uses.
+
 + Rests
     + Pull out `updateTooltipForNoteAtIndex` from `updateAppearanceOfNoteAtIndex`
     + Create `NoteType.restCharacter`
@@ -63,39 +67,60 @@ JGSW:
     + Override `notation` to return rest characters
     + Alter beaming logic in `Piece` to account for rests
     + Override `updateTooltipForNoteAtIndex` to provide clearer explanations for rests
-- Alter scoring so that notes with low scores pull the average down a lot, and notes with high scores don't pull it down much at all
-- Allow levels to specify values for `TimingDescription.knownCounts`, so we can avoid confusing people on early levels
-- Fix block system so it can disallow larger blocks from crossing certain boundaries (e.g. eighth/quarter/eighth syncopation starting on beat 2 of common time)
-    - Can you add an "allowed start" property to blocks, which is by default "anywhere"?
-    - Next, can you weight blocks based on their size relative to the measure? I think smaller blocks are automatically much more prevalent by default.
-    - Next, can you let some blocks be required, so that a random piece will be forced to use one of each required block?
-- Cool background music to help keep beat
++ Swap out ion.sound; it's broken and it's time for type safety anyway
+    + Preload performance sounds, though
+* Add a working backing loop system
+    + Can you scale to account for tempos?
+    + Perfectly align scoring with backing loops (right now you have to rush to pass)
+    - Flesh out your loop library: we need more time signatures!
+    - Allow for multiple loops per time signature, and come up with a clever way of determining index into that array via skill ID and level number, so that it's not Just Random
++ Fix count placement: estimating for the final note using the previous note is totally ineffective; check eighth eighth dotted half for proof.
++ Fix extra problems caused by held key repeats
++ Only count rests if they're on a beat (hah--you made the same mistake your students do!)
++ Totally change scoring so that it's about getting 100%, not 65%. Remove the extras count--it's a weird thing to focus on and its prominence is just an artifact of your model classes.
+
++ Allow levels to specify values for `TimingDescription.knownCounts`, so we can avoid confusing people on early levels
++ Make `AnyLevel` interface for `Level` to implement and `Skill` to hold
++ Abstract the URL to link to to get to each level into `AnyLevel`
++ Make new `TextLevel` class that holds some HTML, links to a new "text.html" page, which will be pretty simple
++ Fix block system so it can disallow larger blocks from crossing certain boundaries (e.g. eighth/quarter/eighth syncopation starting on beat 2 of common time)
+    + Can you add an "allowed start" property to blocks, which is by default "anywhere"?
+    + Next, can you let some blocks be required, so that a random piece will be forced to use one of each required block?
++ Mark level types in the skill tree with an icon
++ Incorporate `Piece` constructor parameters directly into `LevelConstructor` to reduce nesting at creation
+- Create the actual skill tree
+
 - Add cool visuals
     - Space background for world? How can you tie levels into this?
+        - Each skill is a planet. Completing levels is "exploring" the planet. Different skills have different backgrounds to match their planet icons?
     - Animation for right/wrong notes while playing
     - Animation for celebrating when you complete a skill/unlock a new one
 - Can you store all player progress in a URL? This could allow switching devices!
 - Accounts saved on server? based on hash of email; switching accounts on main page
 	- If this isn't viable, how can you learn of students' progress?
+
+- MOAR LOOPS!!!11
 - Ties
 - Can you check counts via speech recognition?
 - Add a link to explain why a note has the count it does
-- Add special nodes to the level tree that are just explanations, that pass automatically on load
 - Allow special nodes to include multiple choice or matching quizzes (for note recognition & beat length in time signatures)
 
 POLISH:
 - Test thoroughly on Internet Explorer--I hear closure capture within loops causes problems, and you totally do that
+- Why did you have to delete the word "export" from howler/index.d.ts every time it occurs to fix the build?
+- Fix spacing bug: it seems that offscreen objects don't work with your count/clap placement code.
+    - Is this your fault or a limitation of the browser?
+    - Can you use `div`s instead of `span`s for your notes, and if so, can you position relative to them? Does that even help?
+- Give every glyph a special offset so that counts can be PERFECTLY aligned
+- Improve style and content of grading tooltips; focus on important content
+- Write tests that check that all your skills are in the skill tree and all your time signatures have backing loops
 - Create an option to practice a level at a slower tempo
 - Create an option to practice certain measures from a level
 - Create a guided review of mistakes, suggested in the final score summary
-- Randomly select from many grading summary messages; students will see them very frequently so they should be varied.
-- Fix spacing bug: it seems that offscreen objects don't work with your count/clap placement code.
-    - Is this your fault or a limitation of the browser?
-    - Can you use `div`s instead of `span`s for your notes, and if so, can you position relative to them?
-- Give every glyph a special offset so that counts can be PERFECTLY aligned
-- Move counts & extra claps & anything else relatively positioned when you resize the window
-    - Can you achieve this automatically by using em positioning, or attaching them to note spans instead of the parent container?
-- What the heck is the deal with HTML nowadays?
-- Close tooltips on manual scroll
 - Get permission to host the Rhythms font for this project, or make your own
 	- I'm concerned about spacing. :( You might need to make a custom font.
+- Randomly select from many grading summary messages; students will see them very frequently so they should be varied.
+- Move counts & extra claps & anything else relatively positioned when you resize the window
+    - Can you achieve this automatically by using em positioning, or attaching them to note spans instead of the parent container?
+- What the heck is the deal with HTML nowadays? There are way more kinds of elements than you remember. Are you using them appropriately?
+- Close tooltips on manual scroll

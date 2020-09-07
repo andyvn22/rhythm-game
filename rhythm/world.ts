@@ -115,12 +115,13 @@ function openDetailsForSkillElement(element: JQuery<HTMLElement>) {
     let levelList = ``;
     for (let i = 0; i < skill.levels.length; i++) {
         const level = skill.levels[i];
+        const levelName = `<span class="level-name">${level.name}</span>&nbsp;<span class="ui-icon ui-icon-${level.icon}"></span>`;
         if (locked || i > Profile.current.skillState(skillID).currentLevel) {
-            levelList += `<li class="level-locked">${level.name}</li>`;
+            levelList += `<li class="level-locked">${levelName}</li>`;
         } else if (i == Profile.current.skillState(skillID).currentLevel) {
-            levelList += `<li class="level-current"><a href="level.html?skill=${skillID}&level=${i}">${level.name}</a></li>`;
+            levelList += `<li class="level-current"><a href="${level.page}.html?skill=${skillID}&level=${i}">${levelName}</a></li>`;
         } else {
-            levelList += `<li class="level-completed"><a href="level.html?skill=${skillID}&level=${i}">${level.name}</a></li>`;
+            levelList += `<li class="level-completed"><a href="${level.page}.html?skill=${skillID}&level=${i}">${levelName}</a></li>`;
         }
     }
 

@@ -1,11 +1,8 @@
 /// <reference path="gameData.ts" />
 
-const params = new URLSearchParams(location.search);
-let skillID = params.get("skill")!;
-let levelIndex = parseInt(params.get("level")!);
+TimingDescription.knownCounts = Level.current.knownCounts;
 
-let level = Skill.forID(skillID)!.levels[levelIndex];
-let player = new Player(level.piece, level.tempo);
+let player = new Player(Level.current.piece, Level.current.tempo);
 player.onPlay = function() { play(); }
 player.onStop = function() { stop(); }
 player.onComplete = function() { showGradeSummary(); }
@@ -32,30 +29,37 @@ function showGradeSummary() {
     assert(player.tempo > 0);
 
     function formatAccuracy(accuracy: number) {
-        const hue = Piece.hueForCorrectness(accuracy);
+        const hue = Piece.hueForAccuracy(accuracy);
         const percentage = Math.round(accuracy * 100) + "%";
         return `<span style="color: hsl(${hue},80%,40%)">${percentage}</span>`;
     }
 
-    function formatExtraPerformanceAttempts(extraPerformanceAttempts: number) {
-        const hue = Piece.hueForCorrectness(extraPerformanceAttempts == 0 ? 1 : 0);
-        return `<span style="color: hsl(${hue},80%,40%)">${extraPerformanceAttempts}</span>`;
+    function formatStars(timingAccuracy: number) {
+        const maxStars = 5;
+        const stars = Math.round(timingAccuracy * maxStars);
+        let result = "";
+        for (let i = 0; i < maxStars; i++) {
+            result += `<span class="star-${i < stars ? `enabled` : `disabled`}">★</span>`;
+        }
+        return result;
     }
 
     function formatSummary(summary: string, passed: boolean) {
-        const hue = Piece.hueForCorrectness(passed ? 1 : 0);
+        const hue = Piece.hueForAccuracy(passed ? 1 : 0);
         const icon = passed ? "check" : "cancel";
         return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
     }
 
     const gradingInfo = player.piece.gradingInfo(player.tempo);
     const summaryElement = `
-        <div id="gradeSummary" title="Let's See How You Did!">
+        <div id="gradeSummary" title="Your Performance">
             <dl style="display: grid">
-                <dt style="grid-column: 1 / 2; grid-row: 2 / 3;">👏 Clap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 1 / 2;">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
-                <dt style="grid-column: 2 / 3; grid-row: 2 / 3;">👏 Extra claps</dt><dd style="grid-column: 2 / 3; grid-row: 1 / 2;">${formatExtraPerformanceAttempts(gradingInfo.extraClaps)}</dd>
-                <dt style="grid-column: 1 / 2; grid-row: 4 / 5;">🦶 Tap accuracy</dt><dd style="grid-column: 1 / 2; grid-row: 3 / 4;">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
-                <dt style="grid-column: 2 / 3; grid-row: 4 / 5;">🦶 Extra taps</dt><dd style="grid-column: 2 / 3; grid-row: 3 / 4;">${formatExtraPerformanceAttempts(gradingInfo.extraTaps)}</dd>
+                <dt style="grid-column: 1/2; grid-row: 2/3;">👏 Successful Claps</dt>
+                    <dd style="grid-column: 1/2; grid-row: 1/2;">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
+                <dt style="grid-column: 3/4; grid-row: 2/3;">🦶 Successful Taps</dt>
+                    <dd style="grid-column: 3/4; grid-row: 1/2;">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
+                <dt style="grid-column: 1/4; grid-row: 4/5;">⏱ Timing Accuracy</dt>
+                    <dd style="grid-column: 1/4; grid-row: 3/4">${formatStars(gradingInfo.timingAccuracy)}</dd>
             </dl>
             ${formatSummary(gradingInfo.summary, gradingInfo.passed)}
         </div>
@@ -73,7 +77,7 @@ function showGradeSummary() {
         buttons.push({
             text: "Next Level!",
             icon: "ui-icon-star",
-            click: exitLevel
+            click: Level.exit
         });
     } else {
         buttons.push({
@@ -106,24 +110,9 @@ function showGradeSummary() {
     if (gradingInfo.passed) { Sound.fanfare.play(); }
 }
 
-function exitLevel() {
-    if (Skill.forID(skillID)!.isCompleted) {
-        location.href = "world.html";
-    } else {
-        location.href = `world.html?skill=${skillID}`;
-    }
-}
-
 $(document).ready(function() {
-    Profile.loadAllFromStorage();
-    Sound.loadStandard();
-
-    $("#exitButton").button({
-        label: "Exit Level",
-        icons: { primary: "ui-icon-home" }
-    }).on("click", function() {
-        exitLevel();
-    });
+    Level.initializePage();
+    player.piece.timeSignature.countoff; //preload countoff sounds
 
     $("#play").button({
         label: "<strong>Play</strong>",
@@ -140,27 +129,33 @@ $(document).ready(function() {
         disabled: true
     }).onButtonPush(tap);
 
-    $("h1").text(level.name);
-    document.title = level.name;
     displayPiece();
 });
 
+let spaceIsDown = false;
+let shiftIsDown = false;
 $(document).keydown(function(event) {
     switch (event.which) {
         case $.ui.keyCode.SPACE:
             event.preventDefault();
-            clap();
-            if (!$("#clap").button("option", "disabled")) {
-                $("#clap").addClass("ui-state-active", 0);
-                $("#clap").removeClass("ui-state-active", 100);
+            if (!spaceIsDown) {
+                spaceIsDown = true;
+                clap();
+                if (!$("#clap").button("option", "disabled")) {
+                    $("#clap").addClass("ui-state-active", 0);
+                    $("#clap").removeClass("ui-state-active", 100);
+                }
             }
             break;
         case 16: //shift
             event.preventDefault();
-            tap();
-            if (!$("#tap").button("option", "disabled")) {
-                $("#tap").addClass("ui-state-active", 0);
-                $("#tap").removeClass("ui-state-active", 100);
+            if (!shiftIsDown) {
+                shiftIsDown = true;
+                tap();
+                if (!$("#tap").button("option", "disabled")) {
+                    $("#tap").addClass("ui-state-active", 0);
+                    $("#tap").removeClass("ui-state-active", 100);
+                }
             }
             break;
         case $.ui.keyCode.ESCAPE:
@@ -171,12 +166,23 @@ $(document).keydown(function(event) {
             break;
         default:
     }
-}); 
+});
+$(document).keyup(function(event) {
+    switch (event.which) {
+        case $.ui.keyCode.SPACE:
+            spaceIsDown = false;
+            break;
+        case 16: //shift
+            shiftIsDown = false;
+            break;
+        default:
+    }
+});
 
 function displayPiece() {
     $("#staff").html(player.piece.notation);
-    for (let i = 0; i < level.piece.notes.length; i++) {
-        level.piece.updateAppearanceOfNoteAtIndex(i);
+    for (let i = 0; i < player.piece.notes.length; i++) {
+        player.piece.updateAppearanceOfNoteAtIndex(i, player.tempo);
     }
 };
 
@@ -192,7 +198,7 @@ function play() {
     if (!player.isPlaying) {
         player.play();
     }
-    player.piece.removeGrading();
+    player.piece.removeGrading(player.tempo);
     $("#play").button({
         label: "Stop",
         icons: { primary: "ui-icon-stop" }
@@ -213,9 +219,7 @@ function stop() {
     $("#tap").button("option", "disabled", true);
 
     if (player.piece.gradingInfo(player.tempo).passed) {
-        if (Profile.current.skillState(skillID).currentLevel === levelIndex) {
-            Profile.current.skillState(skillID).currentLevel = levelIndex + 1;
-        }
+        Level.advance();
     }
 }
 

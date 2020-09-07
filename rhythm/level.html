@@ -86,35 +86,40 @@
 
 		#gradeSummary dl dt {
 			font-weight: 200;
-			margin-bottom: 1em;
+			margin-bottom: 2em;
 		}
 
 		#gradeSummary dl dd {
-			margin: 0;
-			font-size: 12vmin;
+			margin: 0 0.2em;
+			font-size: 9vmin;
 			font-weight: 600;
 
 			text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
 		}
 
-		#exitButton {
-			position: fixed;
-			left: 1em;
-			top: 1em;
-			z-index: 1000;
+		.star-enabled, .star-disabled {
+			text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
+			font-size: 0.7em;
+		}
+
+		.star-enabled {
+			color: rgb(238, 205, 15);
+		}
+
+		.star-disabled {
+			color: rgb(179, 179, 179);
 		}
 	</style>
     <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>
 	<script src="include/jquery-1.12.2.min.js"></script>
 	<script src="include/jquery-ui.min.js"></script>
-	<script src="include/ion.sound.min.js"></script>
+	<script src="include/howler.core.js"></script>
 	<script src="music.js"></script>
 	<script src="gameData.js"></script>
 
 	<script src="level.js"></script>
 	
 	<h1>Level</h1>
-	<button id="exitButton"></button>
 	
 	<div id="staff">
 		

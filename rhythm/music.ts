@@ -24,51 +24,31 @@ function em(em: number, relativeTo = document.body) {
 
 /**
  * A sound effect that can be audibly played, such as a click, part of a countoff, or a backing loop.
+ * 
+ * I don't have the slightest idea why, but you need to delete all instances of "export" in howler/index.d.ts for this to compile... :(
  */
 class Sound {
-	private name: string;
+	private value: Howl;
+	private static howls = Object.create(null);
 
-	private constructor(name: string) {
-		this.name = name;
+	private constructor(name: string, loop = false, rate = 1) {
+		if (Sound.howls[name] === undefined) {
+			Sound.howls[name] = new Howl({
+				src: [`media/sounds/${name}.mp3`],
+				loop: loop,
+				preload: true,
+				rate: rate
+			});
+		}
+		this.value = Sound.howls[name];
 	}
 
 	play() {
-		//@ts-ignore
-		ion.sound.play(this.name);
+		this.value.play();
 	}
 
 	stop() {
-		console.log(`Halting playback of "${this.name}"`);
-		//@ts-ignore
-		ion.sound.stop(this.name);
-	}
-
-	static loadStandard() {
-		//@ts-ignore
-		ion.sound({
-			sounds: [
-				{ name: "metronome" },
-				{ name: "1" },
-				{ name: "2" },
-				{ name: "3" },
-				{ name: "4" },
-				{ name: "5" },
-				{ name: "6" },
-				{ name: "7" },
-				{ name: "8" },
-				{ name: "9" },
-				{ name: "10" },
-				{ name: "rea-" },
-				{ name: "-dy" },
-				{ name: "go" },
-				{ name: "fanfare" },
-				{ name: "90bpm", loop: true, multiplay: false }
-			],
-			volume: 0.8,
-			path: "media/sounds/",
-			preload: true,
-			multiplay: true
-		});
+		this.value.stop();
 	}
 
 	static get metronome() { return new Sound("metronome"); }
@@ -84,8 +64,42 @@ class Sound {
 	static get go() { return new Sound("go"); }
 
 	static get fanfare() { return new Sound("fanfare"); }
-	static get backingLoop() { return new Sound("90bpm"); }
+
+	/**
+	 * Creates and returns a backing loop appropriate for the given time signature and tempo.
+	 * 
+	 * This is not a pure function; save your backing loop instance if you need to stop it later.
+	 */
+	static backingLoop(timeSignature: TimeSignature, tempo: Tempo, index?: number): Sound | undefined {
+		function indexTo(upperBound: number) {
+			if (index !== undefined) {
+				return index % upperBound;
+			} else {
+				return Level.current?.stablePseudorandomIntegerTo(upperBound) ?? Math.floor(Math.random() * upperBound);
+			}
+		}
+
+		const rate = tempo/80;
+		if (timeSignature.isCompound) {
+			switch(timeSignature.top) {
+				case 2: case 4:
+					return new Sound(`loops/compoundQuadruple/${indexTo(0)}`, true, rate);
+				case 3:
+					return new Sound(`loops/compoundTriple/${indexTo(0)}`, true, rate);
+			}
+		} else {
+			switch(timeSignature.top) {
+				case 2: case 4:
+					return new Sound(`loops/simpleQuadruple/${indexTo(3)}`, true, rate);
+				case 3: return new Sound(`loops/simpleTriple/${indexTo(2)}`, true, rate);
+				case 5: return new Sound(`loops/simpleQuintuple/${indexTo(2)}`, true, rate);
+			}
+		}
+		return new Sound(`loops/0`, true, rate);
+	}
 }
+
+type Tempo = 60 | 80 | 100;
 
 /**
  * An event (like a note or beat), whose timing is specified in absolute beats from the start of a piece
@@ -160,29 +174,31 @@ class MusicEvent {
 		this.performanceAttempts = [];
 	}
 
-	correctness(tempo: number) {
+	accuracy(tempo: Tempo) {
 		assert(tempo > 0);
+		function easeInOutSine(x: number): number { return -(Math.cos(Math.PI * x) - 1) / 2; }
+
 		if (this.shouldPerform) {
 			if (this.bestPerformanceAttempt === undefined) { return 0; }
-			return Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0);
+			return easeInOutSine(Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0));
 		} else {
 			if (this.bestPerformanceAttempt === undefined) { return 1; }
 			else return 0;
 		}
 	}
 
-	/** Returns the offsets to all whole-numbered beats that occur before `length` is over, as well as the start of this event itself (always `0`) */
+	/** Returns the offsets to all whole-numbered beats that occur before `length` is over */
 	offsetsToBeatsForLength(length: number) {
 		assert(length > 0);
 		
-		let result = [0];
+		let result = [];
 		for (let i = Math.ceil(this.timing); i < this.timing + length; i++) {
 			result.push(i - this.timing);
 		}
 		return result;
 	}
 
-	static readonly timingThreshold = 200; //ms
+	static readonly timingThreshold = 150; //ms
 }
 
 /**
@@ -270,15 +286,15 @@ class EventList {
 		}
 	}
 
-	gradingInfo(tempo: number) {
+	gradingInfo(tempo: Tempo) {
 		assert(tempo > 0);
 
-		const targetEvents = this.value.filter(x => x.shouldPerform);
-		const minesBlown = this.value.filter(x => !x.shouldPerform && (x.bestPerformanceAttempt !== undefined));
-
-		const accuracy = targetEvents.reduce((a,b) => a + b.correctness(tempo), 0) / targetEvents.length;
-		const extraPerformanceAttempts = this.value.reduce((a,b) => a + b.extraPerformanceAttempts.length, 0) + minesBlown.length;
-		return {accuracy: accuracy, extraPerformanceAttempts: extraPerformanceAttempts};
+		const successes = this.value.filter(x => x.accuracy(tempo) > 0);
+		const extraAttempts = this.value.reduce((a,b) => a + b.extraPerformanceAttempts.length, 0);
+		const accuracy = successes.length / (this.value.length + extraAttempts);
+		const timingAverage = this.value.reduce((a,b) => a + b.accuracy(tempo), 0) / this.value.length;
+		
+		return {accuracy: accuracy, timing: timingAverage};
 	}
 }
 
@@ -558,6 +574,8 @@ class Count {
 	static get allCompoundBasic() { return AllCountNamesCompoundBasic.map(x => new Count(x)); }
 	static get allCompound() { return AllCountNamesCompound.map(x => new Count(x)); }
 	static get all() { return AllCountNames.map(x => new Count(x)); }
+	
+	static get allExceptCompoundAdvanced() { return this.allSimple.concat(this.allCompoundBasic); }
 }
 
 type TimingPrecision = "on" | "a little before" | "a little after";
@@ -582,7 +600,7 @@ class TimingDescription {
 	}
 
 	/** Creates a timing description of the given absolute `timing` in the given `timeSignature` */
-	static of(timing: number, timeSignature: TimeSignature, tempo = 90) {
+	static of(timing: number, timeSignature: TimeSignature, tempo: Tempo) {
 		assert(tempo > 0);
 
 		let beat = Math.floor(timing);
@@ -608,9 +626,9 @@ class TimingDescription {
 
 		let offset = (closestCount.timing - fractionalTiming) * Player.beatLength(tempo);
 		let precision: TimingPrecision = "on";
-		if (offset > MusicEvent.timingThreshold) {
+		if (offset > MusicEvent.timingThreshold / 2) {
 			precision = "a little after";
-		} else if (offset < -MusicEvent.timingThreshold) {
+		} else if (offset < -MusicEvent.timingThreshold / 2) {
 			precision = "a little before";
 		}
 
@@ -710,7 +728,7 @@ class TimeSignature {
 		return new Piece(this, result);
 	}
 
-	milliseconds(notes: Array<Note>, tempo: number) {
+	milliseconds(notes: Array<Note>, tempo: Tempo) {
 		assert(tempo > 0);
 
 		return notes.reduce((a,b) => a + b.relativeLength(this.bottom) * Player.beatLength(tempo), 0);
@@ -762,11 +780,22 @@ class TimeSignature {
  * Several notes combined into a rhythmic unit usable as a building block for a measure of music
  */
 class Block {
+	/** The contents of the block */
 	readonly notes: Array<Note>;
+	/** The beats in the measure (0-indexed) this block is allowed to be placed; `undefined` means anywhere, `[]` means nowhere. */
+	readonly allowedStarts?: Array<number>;
+	/** Whether or not this block is mandated to appear in a randomly-generated piece at least once */
+	readonly isRequired: boolean;
 
-	constructor(notes: Array<Note>) {
+	constructor(notes: Array<Note>, allowedStarts?: Array<number>, isRequired = false) {
 		assert(notes.length > 0);
 		this.notes = notes;
+		this.allowedStarts = allowedStarts;
+		this.isRequired = isRequired;
+	}
+
+	static required(notes: Array<Note>, allowedStarts?: Array<number>) {
+		return new Block(notes, allowedStarts, true);
 	}
 
 	lengthIn(timeSignature: TimeSignature) {
@@ -778,7 +807,11 @@ class Block {
 	}
 
 	fitsAfter(blocks: Array<Block>, timeSignature: TimeSignature) {
-		return Block.lengthOf(blocks, timeSignature) + this.lengthIn(timeSignature) <= timeSignature.top;
+		if (this.allowedStarts?.indexOf(Block.lengthOf(blocks, timeSignature)) === -1) {
+			return false;
+		} else {
+			return Block.lengthOf(blocks, timeSignature) + this.lengthIn(timeSignature) <= timeSignature.top;
+		}
 	}
 
 	/**
@@ -793,12 +826,47 @@ class Block {
 		return possibilities.filter(x => x.fitsAfter(original, timeSignature)).map(x => original.concat(x));
 	}
 
+	/** Returns every possible measure composable with the given blocks in the given time signature */
 	static allPossibleMeasuresFrom(possibilities: Array<Block>, timeSignature: TimeSignature) {
-		let result: Array<Array<Block>> = possibilities.map(x => [x]);
+		let result: Array<Array<Block>> = possibilities.filter(x => x.allowedStarts?.indexOf(0) !== -1).map(x => [x]);
 		while (result.filter(x => Block.lengthOf(x, timeSignature) < timeSignature.top).length > 0) {
 			result = result.map(x => Block.allPossibleNextStepsFor(x, timeSignature, possibilities)).reduce((a,b) => a.concat(b), []);
 		}
-		return result.map(x => x.reduce((a,b) => a.concat(b.notes), [] as Array<Note>));
+		return result;
+	}
+
+	/** Flattens an array of blocks into an array of notes */
+	static flatten(measure: Array<Block>) {
+		return measure.reduce((a,b) => a.concat(b.notes), [] as Array<Note>);
+	}
+
+	/** Returns the specified number of measures, randomly generated from the given blocks, respecting the time signature and `required` property */
+	static randomMeasures(timeSignature: TimeSignature, measures: number, blocks: Array<Block>) {
+		const requiredBlocks = blocks.filter(x => x.isRequired);
+		assert(measures > requiredBlocks.length);
+		const possibleMeasures = Block.allPossibleMeasuresFrom(blocks, timeSignature);
+		
+		let resultMeasures: Array<Array<Note>> = [];
+		for (let requiredBlock of requiredBlocks) {
+			const options = possibleMeasures.filter(x => x.indexOf(requiredBlock) !== -1);
+			resultMeasures.push(Block.flatten(options[Math.floor(Math.random() * options.length)]));
+		}
+		while (resultMeasures.length < measures) {
+			resultMeasures.push(Block.flatten(possibleMeasures[Math.floor(Math.random() * possibleMeasures.length)]));
+		}
+		
+		function shuffle(array: Array<Array<Note>>) {
+			var j, x, i;
+			for (i = array.length - 1; i > 0; i--) {
+				j = Math.floor(Math.random() * (i + 1));
+				x = array[i];
+				array[i] = array[j];
+				array[j] = x;
+			}
+		}
+
+		shuffle(resultMeasures);
+		return resultMeasures.reduce((a,b) => a.concat(b));
 	}
 }
 
@@ -812,10 +880,13 @@ class Piece {
 	readonly noteEvents: EventList;
 	readonly beatEvents: EventList;
 
+	/** A specific index to request when generating a backing loop; if not provided, `Sound` will pick a level-stable random choice */
+	readonly backingLoopIndex?: number;
+
 	/** A unique ID for this piece, usable to look up generated notation as HTML elements. */
 	pieceID?: string;
 
-	constructor(timeSignature: TimeSignature, notes: Array<Note> = []) {
+	constructor(timeSignature: TimeSignature, notes: Array<Note> = [], backingLoopIndex?: number) {
 		this.timeSignature = timeSignature;
 		this.notes = notes.map(x => x.copy());
 		
@@ -828,22 +899,17 @@ class Piece {
 		this.noteEvents = new EventList(noteEvents);
 
 		let beatEvents: Array<MusicEvent> = [];
-		for (let beat = 0; beat <= timing; beat++) {
+		for (let beat = 0; beat < timing; beat++) {
 			beatEvents.push(new MusicEvent(beat));
 		}
 		this.beatEvents = new EventList(beatEvents);
+
+		this.backingLoopIndex = backingLoopIndex;
 	}
 
-	static random(timeSignature: TimeSignature, measures: number, blocks: Array<Block>) {
+	static random(timeSignature: TimeSignature, measures: number, blocks: Array<Block>, backingLoopIndex?: number) {
 		assert(measures > 0);
-		const possibleMeasures = Block.allPossibleMeasuresFrom(blocks, timeSignature);
-
-		let result: Array<Note> = [];
-		for (let i = 0; i < measures; i++) {
-			result = result.concat(possibleMeasures[Math.floor(Math.random() * possibleMeasures.length)]);
-		}
-
-		return new Piece(timeSignature, result);
+		return new Piece(timeSignature, Block.randomMeasures(timeSignature, measures, blocks), backingLoopIndex);
 	}
 
 	get end() {
@@ -872,63 +938,49 @@ class Piece {
 		return this.pieceID + "-note" + noteIndex;
 	}
 
-	removeGrading() {
+	removeGrading(tempo: Tempo) {
 		this.noteEvents.removeGrading();
 		this.beatEvents.removeGrading();
 		for (let i = 0; i < this.notes.length; i++) {
-			this.updateAppearanceOfNoteAtIndex(i);
+			this.updateAppearanceOfNoteAtIndex(i, tempo);
 		}
 	}
 
-	static passAccuracy = 0.65;
-	static stellarAccuracy = 0.85;
-	gradingInfo(tempo: number) {
+	gradingInfo(tempo: Tempo) {
 		assert(tempo > 0);
 		
 		const clapInfo = this.noteEvents.gradingInfo(tempo);
 		const tapInfo = this.beatEvents.gradingInfo(tempo);
-		let passed: boolean;
+		const passed = clapInfo.accuracy === 1 && tapInfo.accuracy === 1;
+		const timingAccuracy = (clapInfo.timing + tapInfo.timing) / 2;
+		const averageAccuracy = (clapInfo.accuracy + tapInfo.accuracy) / 2;
+
 		let summary: string;
-		if (clapInfo.accuracy < Piece.passAccuracy && tapInfo.accuracy < Piece.passAccuracy) {
-			passed = false;
-			summary = "This level needs more work. Keep practicing; you can do it!";
-		} else if (clapInfo.accuracy < Piece.passAccuracy && tapInfo.accuracy >= Piece.passAccuracy) {
-			passed = false;
-			if (tapInfo.extraPerformanceAttempts == 0) {
-				summary = "You're keeping the beat well with your taps, but focus on those claps! Keep working; you can do it!";
+
+		if (passed) {
+			if (timingAccuracy > 0.9) {
+				summary = "Wow! You totally rocked that level; amazing job! See if you can do as well on the next!";
+			} else if (timingAccuracy > 0.5) {
+				summary = "Nice performance! This level's done; onto the next!";
 			} else {
-				summary = "Good work keeping the beat, but be careful not to add extra taps. Let's also focus on clap accuracy; you can do this!";
+				summary = "You successfully performed every clap and tap! You can head on to the next level, or stick around and try to improve your timing!";
 			}
-		} else if (clapInfo.accuracy >= Piece.passAccuracy && tapInfo.accuracy < Piece.passAccuracy) {
-			passed = false;
-			if (clapInfo.extraPerformanceAttempts == 0) {
-				summary = "Nice clap timing; you're reading those rhythms well! All that's left now is to keep a steady beat with your taps!"
-			} else {
-				summary = "Nice rhythm reading, but be careful not to add extra claps! Then, focus on keeping a steady beat with your taps and you'll have this!"
-			}
-		} else if (clapInfo.accuracy >= Piece.stellarAccuracy && tapInfo.accuracy >= Piece.stellarAccuracy && clapInfo.extraPerformanceAttempts == 0 && tapInfo.extraPerformanceAttempts == 0) {
-			passed = true;
-			summary = "Wow! You totally rocked that level; amazing job! See if you can do as well on the next!";
-		} else { //accuracy check passed
-			passed = clapInfo.extraPerformanceAttempts + tapInfo.extraPerformanceAttempts == 0;
-			if (clapInfo.extraPerformanceAttempts > 0 && tapInfo.extraPerformanceAttempts > 0) {
-				summary = "Nice accuracy! Next, eliminate those extra claps and taps and you'll be done with this one!";
-			} else if (clapInfo.extraPerformanceAttempts > 0) {
-				const extras = `${clapInfo.extraPerformanceAttempts == 1 ? "is" : "are"} ${clapInfo.extraPerformanceAttempts} extra clap${clapInfo.extraPerformanceAttempts == 1 ? "" : "s"}`;
-				summary = `Fantastic beat-keeping with your taps! All that's standing between you and finishing this level ${extras}!`;
-			} else if (tapInfo.extraPerformanceAttempts > 0) {
-				const extras = `${tapInfo.extraPerformanceAttempts == 1 ? "is" : "are"} ${tapInfo.extraPerformanceAttempts} extra tap${tapInfo.extraPerformanceAttempts == 1 ? "" : "s"}`;
-				summary = `Fantastic rhythm reading with your claps! All that's standing between you and being done with this level ${extras}!`;
-			} else {
-				summary = "What a great performance! You're done with this level; onto the next!"
-			}
+		} else if (tapInfo.accuracy === 0) {
+			summary = "Don't forget that you have to tap to the beat, not just clap the notes! Keep trying!";
+		} else if (clapInfo.accuracy === 1) {
+			summary = "Nice clapping! Focus on keeping a steady beat and you'll have this!";
+		} else if (tapInfo.accuracy === 1) {
+			summary = "Good work keeping the beat&mdash;focus next on clap accuracy; you can do this!";
+		} else if (averageAccuracy > 0.8) {
+			summary = "Almost there! Review the measures that are tripping you up&mdash;try practicing them one at a time before you go again!";
+		} else {
+			summary = "Practice is hard; keep working! You don't have to master the whole piece at once&mdash;pick just one measure to review and repeat it over and over yourself before you try again!";
 		}
 
 		return {
 			clapAccuracy: clapInfo.accuracy,
-			extraClaps: clapInfo.extraPerformanceAttempts,
 			tapAccuracy: tapInfo.accuracy,
-			extraTaps: tapInfo.extraPerformanceAttempts,
+			timingAccuracy: timingAccuracy,
 			passed: passed,
 			summary: summary
 		};
@@ -960,7 +1012,7 @@ class Piece {
 			const note = this.notes[i];
 			const noteLength = note.relativeLength(this.timeSignature.bottom);
 			const willCrossBeat = Math.floor(currentBeat) != Math.floor(currentBeat + noteLength) || i == this.notes.length - 1;
-			const nextBeams = (willCrossBeat || i == this.notes.length-1) ? 0 : this.notes[i+1].type.beams;
+			const nextBeams = willCrossBeat || this.notes[i+1] instanceof Rest ? 0 : this.notes[i+1].type.beams;
 			
 			let beamsIn: NoteTypeBeams;
 			let beamsOut: NoteTypeBeams;
@@ -1028,7 +1080,7 @@ class Piece {
 	 * @param counts Which counts may be used to describe locations in time; necessary to interpret offsets near barlines
 	 * @param tempo The tempo of the piece
 	 */
-	private positionOffsetFromNoteIndex(offset: number, noteIndex: number, tempo: number) {
+	private positionOffsetFromNoteIndex(offset: number, noteIndex: number, tempo: Tempo) {
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
 
@@ -1046,22 +1098,17 @@ class Piece {
 			if (noteIndex < this.notes.length - 1) {
 				const metrics = this.metricsForIndices(noteIndex, noteIndex + 1);
 				return (offset / metrics.beatLength) * metrics.pixelOffset;
-			} else if (noteIndex > 0) {
-				//estimate using previous note as a guide
-				const metrics = this.metricsForIndices(noteIndex, noteIndex - 1);
-				return (offset / metrics.beatLength) * -metrics.pixelOffset;
 			} else {
-				//give up
-				return 0;
+				return offset * em(5); //just guessing
 			}
 		}
 	}
 
-	static hueForCorrectness(correctness: number) {
-		return correctness * 125; //125°==green, 0°==red
+	static hueForAccuracy(accuracy: number) {
+		return accuracy * 125; //125°==green, 0°==red
 	}
 	
-	updateAppearanceOfNoteAtIndex(noteIndex: number, tempo = 90) {
+	updateAppearanceOfNoteAtIndex(noteIndex: number, tempo: Tempo) {
 		assert(tempo > 0);
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
@@ -1071,7 +1118,7 @@ class Piece {
 		this.updateCountingsOfNoteAtIndex(noteIndex, tempo); //must be called after setting `noteElement.tooltip`
 	}
 
-	private updateTooltipForNoteAtIndex(noteIndex: number, tempo: number) {
+	private updateTooltipForNoteAtIndex(noteIndex: number, tempo: Tempo) {
 		assert(tempo > 0);
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
@@ -1086,10 +1133,10 @@ class Piece {
 		if (!event.graded) {
 			noteElement.css("color","black");
 		} else {
-			const hue = Piece.hueForCorrectness(event.correctness(tempo));
+			const hue = Piece.hueForAccuracy(event.accuracy(tempo));
 
 			if (event.bestPerformanceAttempt === undefined) {
-				tooltipContent += `<div style="color: hsl(${event.correctness},80%,40%)">You didn't clap near it</div>`;
+				tooltipContent += `<div style="color: hsl(${event.accuracy},80%,40%)">You didn't clap near it</div>`;
 			} else {
 				tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You clapped ${TimingDescription.of(event.timing + event.bestPerformanceAttempt, this.timeSignature, tempo).description(Verbosity.long)}</div>`;
 			}
@@ -1100,7 +1147,7 @@ class Piece {
 		if (event.timing === Math.floor(event.timing)) {
 			let beatEvent = this.beatEvents.index(event.timing);
 			if (beatEvent.graded) {
-				const hue = Piece.hueForCorrectness(beatEvent.correctness(tempo));
+				const hue = Piece.hueForAccuracy(beatEvent.accuracy(tempo));
 				if (beatEvent.bestPerformanceAttempt === undefined) {
 					tooltipContent += `<div style="color: hsl(${hue},80%,40%)">You didn't tap ${TimingDescription.of(beatEvent.timing, this.timeSignature, tempo).description(Verbosity.medium)}</div>`;
 				} else {
@@ -1119,7 +1166,7 @@ class Piece {
 		});
 	}
 
-	private updateExtraClapsOfNoteAtIndex(noteIndex: number, tempo: number) {
+	private updateExtraClapsOfNoteAtIndex(noteIndex: number, tempo: Tempo) {
 		assert(tempo > 0);
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
@@ -1150,7 +1197,7 @@ class Piece {
 		}
 	}
 
-	private updateCountingsOfNoteAtIndex(noteIndex: number, tempo: number) {
+	private updateCountingsOfNoteAtIndex(noteIndex: number, tempo: Tempo) {
 		assert(tempo > 0);
 		assert(noteIndex >= 0);
 		assert(noteIndex < this.notes.length);
@@ -1167,16 +1214,18 @@ class Piece {
 
 		if (!noteEvent.graded) { return; }
 
-		for (let relativeCounting of noteEvent.offsetsToBeatsForLength(note.relativeLength(this.timeSignature.bottom))) {
+		const shouldShowNoteCount = !(note instanceof Rest) || noteEvent.timing === Math.floor(noteEvent.timing);
+		const visibleCountings = (shouldShowNoteCount ? [0] : []).concat(noteEvent.offsetsToBeatsForLength(note.relativeLength(this.timeSignature.bottom)));
+		for (let relativeCounting of visibleCountings) {
 			const absoluteCounting = noteEvent.timing + relativeCounting;
 			const position = this.positionOffsetFromNoteIndex(relativeCounting, noteIndex, tempo);
 
-			let noteCorrectness = 1;
-			let beatCorrectness = 1;
+			let noteAccuracy = 1;
+			let beatAccuracy = 1;
 			let tooltipContent: string;
 			if (absoluteCounting === Math.floor(absoluteCounting)) {
 				const beatEvent = this.beatEvents.index(absoluteCounting);
-				beatCorrectness = beatEvent.correctness(tempo);
+				beatAccuracy = beatEvent.accuracy(tempo);
 				if (!beatEvent.graded) { return; }
 
 				//Render extra taps
@@ -1198,9 +1247,9 @@ class Piece {
 			}
 
 			if (relativeCounting === 0 && noteEvent.timing !== Math.floor(noteEvent.timing)) {
-				noteCorrectness = noteEvent.correctness(tempo);
+				noteAccuracy = noteEvent.accuracy(tempo);
 			}
-			const hue = Piece.hueForCorrectness(Math.min(noteCorrectness, beatCorrectness));
+			const hue = Piece.hueForAccuracy(Math.min(noteAccuracy, beatAccuracy));
 
 			const countingElement = $(`<div style="color: hsl(${hue},80%,40%)" class="counting ${countingClass}" title="">&nbsp;${TimingDescription.of(absoluteCounting, this.timeSignature, tempo).description(Verbosity.short)}</div>`);
 			noteElement.parent().append(countingElement);
@@ -1255,7 +1304,9 @@ class Player {
 		this.playback = undefined;
 	}
 
-	tempo: number;
+	tempo: Tempo;
+	private backingLoop?: Sound;
+
 	/** Called when the player starts playback. */
 	onPlay = function() {};
 
@@ -1267,9 +1318,10 @@ class Player {
 
 	private playback?: Playback;
 
-	constructor(piece: Piece, tempo = 90) {
+	constructor(piece: Piece, tempo: Tempo) {
 		this._piece = piece;
 		this.tempo = tempo;
+		this.backingLoop = Sound.backingLoop(piece.timeSignature, tempo);
 	}
 
 	get isPlaying() { return this.playback !== undefined; }
@@ -1305,11 +1357,10 @@ class Player {
 	 * Stops playback, re-enabling tooltips on `piece` and calling `onStop` if set. If playback has already been stopped, does nothing.
 	 */
 	stop() {
-		console.log("Stopping...");
 		if (!this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
 		clearTimeout(this.playback.timerID);
-		Sound.backingLoop.stop();
+		this.backingLoop?.stop();
 		this.playback = undefined;
 		this.piece.showTooltips(true);
 		this.onStop();
@@ -1329,7 +1380,7 @@ class Player {
 		if (this.isCountingOff || !this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
 
-		const clapTime = (Date.now() - this.playback.startTime) / Player.beatLength(this.tempo);
+		const clapTime = (Date.now() - Player.synchronizationHack - this.playback.startTime) / Player.beatLength(this.tempo);
 
 		const affectedIndices = this.piece.noteEvents.gradePerformanceAttempt(clapTime);
 		for (let i of affectedIndices) {
@@ -1342,7 +1393,7 @@ class Player {
 		if (this.isCountingOff || !this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
 
-		const tapTime = (Date.now() - this.playback.startTime) / Player.beatLength(this.tempo);
+		const tapTime = (Date.now() - Player.synchronizationHack - this.playback.startTime) / Player.beatLength(this.tempo);
 		const affectedIndices = this.piece.beatEvents.gradePerformanceAttempt(tapTime);
 		for (let i of affectedIndices) {
 			const noteIndex = this.piece.noteEvents.lastIndexBefore(this.piece.beatEvents.index(i).timing);
@@ -1356,7 +1407,7 @@ class Player {
 
 		this.piece.beatEvents.enableGradingThrough((Date.now() - this.playback.startTime) / Player.beatLength(this.tempo));
 		if (this.playback.nextNote > 0 && this.playback.nextNote <= this.piece.notes.length) {
-			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1);
+			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1, this.tempo);
 		}
 
 		requestAnimationFrame(() => this.update());
@@ -1366,9 +1417,13 @@ class Player {
 		if (this.piece === undefined) { return; }
 		if (this.playback === undefined) { return; }
 
+		if (this.playback.nextNote === 0) {
+			this.backingLoop?.play();
+		}
+
 		if (this.playback.nextNote >= this.piece.notes.length) {
 			this.piece.beatEvents.enableGradingThrough(this.piece.end);
-			this.piece.updateAppearanceOfNoteAtIndex(this.piece.notes.length - 1);
+			this.piece.updateAppearanceOfNoteAtIndex(this.piece.notes.length - 1, this.tempo);
 			this.stop();
 			this.onComplete();
 		}
@@ -1376,9 +1431,6 @@ class Player {
 		
 		const currentNote = this.isCountingOff ? this.piece.timeSignature.countoff.notes[this.playback.nextNote + this.piece.timeSignature.countoff.notes.length] : this.piece.notes[this.playback.nextNote];
 		
-		if (this.playback.nextNote === 0) {
-			//Sound.backingLoop.play();
-		}
 		currentNote.sound?.play();
 		
 		let noteElement = undefined;
@@ -1421,8 +1473,10 @@ class Player {
 		this.playback.timerID = window.setTimeout(function() { self.playNote(); }, nextNoteTime - Date.now());
 	}
 
-	static beatLength(tempo: number) {
+	static beatLength(tempo: Tempo) {
 		assert(tempo > 0);
 		return 1000 * 60/tempo;
 	};
+
+	static synchronizationHack = 20; //ms
 }

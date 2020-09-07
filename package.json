@@ -2,6 +2,7 @@
   "name": "rhythm-game",
   "version": "1.0.0",
   "dependencies": {
+    "@types/howler": "^2.2.1",
     "@types/jquery": "^3.5.1",
     "@types/jqueryui": "^1.12.13"
   },
