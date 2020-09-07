@@ -27,20 +27,22 @@ function updateRequirementLines() {
 
     let height = 0;
     $(".skill").each(function() {
-        const skillCompleted = Skill.isCompleted($(this).attr("id")!);
+        const skill = Skill.forID($(this).attr("id")!);
+        if (skill === undefined) { return; }
 
         for (let requirementID of requirementIDsForSkillElement($(this))) {
-            const requirementMet = Skill.isCompleted(requirementID);
-            const color = skillCompleted ? "#dbcfb5" : requirementMet ? "white" : "hsl(0,0%,85%)";
+            const requirement = Skill.forID(requirementID);
+            if (requirement === undefined) { return; }
+            const color = skill.isCompleted ? "#dbcfb5" : requirement.isCompleted ? "white" : "hsl(0,0%,85%)";
 
-            const requirement = $("#" + requirementID);
+            const requirementElement = $("#" + requirementID);
             const newLine = `<line 
                 x1="${$(this).offset()!.left + $(this).width()!/2}" y1="${$(this).offset()!.top + $(this).height()!/2}"
-                x2="${requirement.offset()!.left + requirement.width()!/2}" y2="${requirement.offset()!.top + requirement.height()!/2}"
+                x2="${requirementElement.offset()!.left + requirementElement.width()!/2}" y2="${requirementElement.offset()!.top + requirementElement.height()!/2}"
                 stroke="${color}" stroke-width="3"
             />`;
 
-            if (requirementMet) {
+            if (requirement.isCompleted) {
                 lines += newLine;
             } else {
                 disabledLines += newLine;
@@ -67,7 +69,8 @@ function skillElementIsUnlocked(element: JQuery<HTMLElement>) {
     const requirements = element.data("requirement");
     if (requirements !== undefined) {
         for (let requirementID of requirements.split(" ")) {
-            if (!Skill.isCompleted(requirementID)) { return false; }
+            const requirementMet = Skill.forID(requirementID)?.isCompleted ?? true;
+            if (!requirementMet) { return false; }
         }
     }
     return true;
@@ -79,6 +82,11 @@ function updateSkills() {
     $(".skill").each(function() {
         const skillID = $(this).attr("id")!;
         const skill = Skill.forID(skillID);
+        if (skill === undefined) {
+            $(this).addClass("skill-undefined");
+            $(this).text(skillID);
+            return;
+        }
         const currentLevel = Profile.current.skillState(skillID).currentLevel;
         if (currentLevel >= skill.levels.length) {
             $(this).addClass("skill-completed");
@@ -100,6 +108,7 @@ function updateSkills() {
 function openDetailsForSkillElement(element: JQuery<HTMLElement>) {
     const skillID = element.attr("id")!;
     const skill = Skill.forID(skillID);
+    if (skill === undefined) { return; }
     const locked = !skillElementIsUnlocked(element);
     const completed = skill.levels.length <= Profile.current.skillState(skillID).currentLevel;
 
@@ -118,8 +127,8 @@ function openDetailsForSkillElement(element: JQuery<HTMLElement>) {
     let skillProgress = `<div id="skillProgress-${skillID}"></div>`;
     if (locked) {
         const missingRequirements = requirementIDsForSkillElement(element)
-            .filter(x => !Skill.isCompleted(x))
-            .map(x => `<li><span class="ui-icon ui-icon-locked"></span>${Skill.forID(x).name}</li>`);
+            .filter(x => !(Skill.forID(x)?.isCompleted ?? true))
+            .map(x => `<li><span class="ui-icon ui-icon-locked"></span>${Skill.forID(x)?.name ?? x}</li>`);
 
         skillProgress = `<div class="skillRequirementsList">
             To unlock this skill, complete:
@@ -247,7 +256,6 @@ function openProfileDialog() {
 
 $(document).ready(function() {
     Profile.onUpdate = function() {
-        console.log("Callback");
         updateProfileButton();
         updateProfileDialog();
         updateSkills();
@@ -272,7 +280,7 @@ $(document).ready(function() {
 
     const params = new URLSearchParams(location.search);
     let skillID = params.get("skill");
-    if (skillID !== undefined) {
+    if (skillID !== null) {
         openDetailsForSkillElement($("#" + skillID));
     }
 });

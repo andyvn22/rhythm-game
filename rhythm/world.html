@@ -67,6 +67,7 @@
             padding: 1em 0.2em;
             border-width: 3px;
             border-style: solid;
+            border-radius: 4px;
             box-shadow: 0.2em 0.2em 0.6em black;
 
             text-align: center;
@@ -118,6 +119,17 @@
             background: rgb(216, 216, 216);
             text-shadow: none;
             box-shadow: 0.2em 0.2em 0.6em rgb(172, 172, 172);
+        }
+
+        .skill.skill-undefined {
+            border: 3px dashed red;
+            background: rgb(172, 172, 172);
+            color: red;
+        }
+
+        .skill.skill-undefined::before {
+            content: "🚧 ";
+            white-space: pre;
         }
 
         /*****************/
@@ -196,6 +208,7 @@
             position: fixed;
             left: 1em;
             top: 1em;
+            z-index: 1000;
         }
 
         fieldset {
@@ -226,7 +239,9 @@
     
     <div id="skillTree">
         <div class="row">
+            <div class="skill" id="newTest"></div>
             <div class="skill" id="randomEasy"></div>
+            <div class="skill" id="rests"></div>
         </div>
         <div class="row">
             <div class="skill" id="fiveFourTest" data-requirement="randomEasy"></div>

@@ -4,7 +4,7 @@ const params = new URLSearchParams(location.search);
 let skillID = params.get("skill")!;
 let levelIndex = parseInt(params.get("level")!);
 
-let level = Skill.forID(skillID).levels[levelIndex];
+let level = Skill.forID(skillID)!.levels[levelIndex];
 let player = new Player(level.piece, level.tempo);
 player.onPlay = function() { play(); }
 player.onStop = function() { stop(); }
@@ -103,13 +103,11 @@ function showGradeSummary() {
         }
     });
 
-    if (gradingInfo.passed) {
-        playSound("fanfare");
-    }
+    if (gradingInfo.passed) { Sound.fanfare.play(); }
 }
 
 function exitLevel() {
-    if (Skill.isCompleted(skillID)) {
+    if (Skill.forID(skillID)!.isCompleted) {
         location.href = "world.html";
     } else {
         location.href = `world.html?skill=${skillID}`;
@@ -118,6 +116,7 @@ function exitLevel() {
 
 $(document).ready(function() {
     Profile.loadAllFromStorage();
+    Sound.loadStandard();
 
     $("#exitButton").button({
         label: "Exit Level",
@@ -141,35 +140,9 @@ $(document).ready(function() {
         disabled: true
     }).onButtonPush(tap);
 
-    //@ts-ignore
-    ion.sound({
-        sounds: [
-            { name: "metronome" },
-            { name: "fanfare" },
-            { name: "1" },
-            { name: "2" },
-            { name: "3" },
-            { name: "4" },
-            { name: "5" },
-            { name: "6" },
-            { name: "7" },
-            { name: "8" },
-            { name: "9" },
-            { name: "10" },
-            { name: "rea-" },
-            { name: "-dy" },
-            { name: "go" }
-        ],
-        volume: 0.8,
-        path: "media/sounds/",
-        preload: true,
-        multiplay: true
-    });
-
     $("h1").text(level.name);
     document.title = level.name;
     displayPiece();
-    showGradeSummary();
 });
 
 $(document).keydown(function(event) {

@@ -50,19 +50,30 @@ JGSW:
     + Show progress bars in skills
     + Style skills: completed, current, locked (oof, that's a LOT of CSS...)
     + Disable entire skills based on requirements
-- Refactor `gameData.ts`--I think `Skill` needs to know its own `id` for most reasonable uses.
-- Rests
++ Refactor `gameData.ts`--I think `Skill` needs to know its own `id` for most reasonable uses.
++ Rests
+    + Pull out `updateTooltipForNoteAtIndex` from `updateAppearanceOfNoteAtIndex`
+    + Create `NoteType.restCharacter`
+    + Create `Event.shouldPerform` and update grading accordingly
+        + Correctness = 0 if clap is nearby
+        + All claps are listed as extra
+    + Subclass `Note` to `Rest`
+    + Create `shouldPerform = false` events for rests in the `Piece` constructor
+    + Override `sound` to none
+    + Override `notation` to return rest characters
+    + Alter beaming logic in `Piece` to account for rests
+    + Override `updateTooltipForNoteAtIndex` to provide clearer explanations for rests
 - Alter scoring so that notes with low scores pull the average down a lot, and notes with high scores don't pull it down much at all
+- Allow levels to specify values for `TimingDescription.knownCounts`, so we can avoid confusing people on early levels
 - Fix block system so it can disallow larger blocks from crossing certain boundaries (e.g. eighth/quarter/eighth syncopation starting on beat 2 of common time)
     - Can you add an "allowed start" property to blocks, which is by default "anywhere"?
     - Next, can you weight blocks based on their size relative to the measure? I think smaller blocks are automatically much more prevalent by default.
     - Next, can you let some blocks be required, so that a random piece will be forced to use one of each required block?
 - Cool background music to help keep beat
-- Add cool animations
-    - Something for right/wrong notes while playing
-    - Something for celebrating when you complete a skill/unlock a new one
-    - Anything else you can think of
-- Browser local storage for progress?
+- Add cool visuals
+    - Space background for world? How can you tie levels into this?
+    - Animation for right/wrong notes while playing
+    - Animation for celebrating when you complete a skill/unlock a new one
 - Can you store all player progress in a URL? This could allow switching devices!
 - Accounts saved on server? based on hash of email; switching accounts on main page
 	- If this isn't viable, how can you learn of students' progress?
