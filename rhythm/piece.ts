@@ -1,8 +1,8 @@
 /// <reference path="gameData.ts" />
 
-TimingDescription.knownCounts = Level.current.knownCounts;
+TimingDescription.knownCounts = PieceLevel.currentCounts;
 
-let player = new Player(Level.current.piece, Level.current.tempo);
+let player = new Player(PieceLevel.current.piece, PieceLevel.current.tempo);
 player.onPlay = function() { play(); }
 player.onStop = function() { stop(); }
 player.onComplete = function() { showGradeSummary(); }
@@ -77,7 +77,7 @@ function showGradeSummary() {
         buttons.push({
             text: "Next Level!",
             icon: "ui-icon-star",
-            click: Level.exit
+            click: PieceLevel.goToNext
         });
     } else {
         buttons.push({
@@ -111,7 +111,7 @@ function showGradeSummary() {
 }
 
 $(document).ready(function() {
-    Level.initializePage();
+    PieceLevel.initializePage();
     player.piece.timeSignature.countoff; //preload countoff sounds
 
     $("#play").button({
@@ -164,6 +164,10 @@ $(document).keydown(function(event) {
                 stop();
             }
             break;
+        case $.ui.keyCode.PERIOD: //cheat
+            PieceLevel.pass();
+            showGradeSummary();
+            break;
         default:
     }
 });
@@ -196,6 +200,10 @@ function togglePlayback() {
 
 function play() {
     if (!player.isPlaying) {
+        if (Level.current instanceof RandomLevel) {
+            player.piece = Level.current.piece;
+            displayPiece();
+        }
         player.play();
     }
     player.piece.removeGrading(player.tempo);
@@ -219,7 +227,7 @@ function stop() {
     $("#tap").button("option", "disabled", true);
 
     if (player.piece.gradingInfo(player.tempo).passed) {
-        Level.advance();
+        PieceLevel.pass();
     }
 }
 

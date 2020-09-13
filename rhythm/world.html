@@ -61,15 +61,16 @@
         /* Skills */
         /**********/
 
-        .skill {
+        .skill, .spacer {
             width: 7em;
             height: 6em;
+            margin: 1em;
+        }
+
+        .skill {
             padding: 1em 0.2em;
-            margin: 0.5em;
-            border-width: 3px;
-            border-style: solid;
             border-radius: 4px;
-            box-shadow: 0.2em 0.2em 0.6em black;
+            box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.7), inset 0.2em 0.2em 0.2em rgba(255, 255, 255, 0.6), inset -0.2em -0.2em 0.2em rgba(0, 0, 0, 0.6);
 
             text-align: center;
             font-weight: bold;
@@ -84,6 +85,7 @@
 
         .skill-open {
 			text-shadow: 0.1em 0.1em 0.2em white, -0.1em -0.1em 0.2em black;
+            box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.7), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
         }
 
         .skill-completed {
@@ -119,7 +121,7 @@
             color: rgb(243, 243, 243);
             background: rgb(216, 216, 216);
             text-shadow: none;
-            box-shadow: 0.2em 0.2em 0.6em rgb(172, 172, 172);
+            box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.3);
         }
 
         .skill.skill-undefined {
@@ -241,24 +243,47 @@
 	<script src="gameData.js"></script>
 
 	<script src="world.js"></script>
-	
-    <h1>World</h1>
 
     <button id="profileButton"></button>
     
     <div id="skillTree">
         <div class="row">
-            <div class="skill" id="newTest"></div>
-            <div class="skill" id="randomEasy"></div>
-            <div class="skill" id="rests"></div>
+            <div class="skill" id="welcome"></div>
         </div>
         <div class="row">
-            <div class="skill" id="fiveFourTest" data-requirement="randomEasy"></div>
-            <div class="skill" id="sixEightTest" data-requirement="randomEasy"></div>
+            <div class="skill" id="halfNotes" data-requirements="welcome"></div>
         </div>
         <div class="row">
-            <div class="skill" id="randomHard" data-requirement="fiveFourTest"></div>
-            <div class="skill" id="sixteenths"></div>
+            <div class="skill" id="quarterNotes" data-requirements="halfNotes"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="eighthNotes" data-requirements="quarterNotes"></div>
+            <div class="skill" id="topNumber" data-requirements="quarterNotes"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes" data-requirements="eighthNotes"></div>
+            <div class="skill" id="dots" data-requirements="eighthNotes topNumber"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="bottomNumber" data-requirements="dots"></div>
+            <div class="skill" id="moreSixteenths" data-requirements="sixteenthNotes dots"></div>
+            <div class="skill" id="moreEighths" data-requirements="dots"></div>
+            <div class="skill" id="threeFour" data-requirements="dots"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="compoundTime" data-requirements="bottomNumber"></div>
+            <div class="skill" id="cutTime" data-requirements="bottomNumber"></div>
+            <div class="skill" id="syncopation" data-requirements="moreSixteenths moreEighths"></div>
+            <div class="skill" id="fiveFour" data-requirements="threeFour moreEighths"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="advancedCompoundTime" data-requirements="compoundTime syncopation"></div>
+            <div class="skill" id="advancedCutTime" data-requirements="cutTime syncopation"></div>
+            <div class="skill" id="compoundSingle" data-requirements="compoundTime fiveFour"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="rhythmMaster" data-requirements="advancedCompoundTime advancedCutTime compoundSingle"></div>
         </div>
     </div>
 

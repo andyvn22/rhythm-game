@@ -8,7 +8,7 @@ $(document).ready(function() {
         label: "Ready for the Next Level!",
         icons: { primary: "ui-icon-check" }
     }).on("click", function() {
-        TextLevel.advance();
+        TextLevel.pass();
         TextLevel.exit();
     });
 });

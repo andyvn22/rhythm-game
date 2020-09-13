@@ -88,7 +88,23 @@ JGSW:
     + Next, can you let some blocks be required, so that a random piece will be forced to use one of each required block?
 + Mark level types in the skill tree with an icon
 + Incorporate `Piece` constructor parameters directly into `LevelConstructor` to reduce nesting at creation
++ Your estimating just doesn't work; put a span around the final barline and use it for calculations, dangit.
++ Add "Final level in $skill!" to splash.
++ Make randomized pieces regenerate themselves when they're played! This makes them much more interesting!!
++ Make timing accuracy stars harder to earn
++ When you return to an open skill, scroll to the tooltip
++ Can you debounce the Clap & Tap buttons?
++ Show total levels in skill in the title bar for the start window
++ Make "Next Level" go directly to the next level
++ Show level icon on intro window
++ Fix scrolling easing
+
 - Create the actual skill tree
+    - Split Eighth Notes into two skills, focus on eighth rests for longer
+    - Double levels in the Dots skill--really drill dotted quarters
+    - Double levels in the Top Number skill
+    - Split Sixteenth Notes into three skills, one per rhythm
+    - Double levels in Three Four
 
 - Add cool visuals
     - Space background for world? How can you tie levels into this?

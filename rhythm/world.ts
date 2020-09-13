@@ -28,12 +28,10 @@ function updateRequirementLines() {
     let height = 0;
     $(".skill").each(function() {
         const skill = Skill.forID($(this).attr("id")!);
-        if (skill === undefined) { return; }
 
         for (let requirementID of requirementIDsForSkillElement($(this))) {
             const requirement = Skill.forID(requirementID);
-            if (requirement === undefined) { return; }
-            const color = skill.isCompleted ? "#dbcfb5" : requirement.isCompleted ? "white" : "hsl(0,0%,85%)";
+            const color = (skill?.isCompleted ?? false) ? "#dbcfb5" : (requirement?.isCompleted ?? false) ? "white" : "hsl(0,0%,85%)";
 
             const requirementElement = $("#" + requirementID);
             const newLine = `<line 
@@ -42,7 +40,7 @@ function updateRequirementLines() {
                 stroke="${color}" stroke-width="3"
             />`;
 
-            if (requirement.isCompleted) {
+            if (requirement?.isCompleted ?? false) {
                 lines += newLine;
             } else {
                 disabledLines += newLine;
@@ -60,13 +58,13 @@ function updateRequirementLines() {
 
 /** Returns an array of the skill IDs required by `element`. */
 function requirementIDsForSkillElement(element: JQuery<HTMLElement>): Array<string> {
-    const requirements = element.data("requirement");
+    const requirements = element.data("requirements");
     return requirements?.split(" ") ?? [];
 }
 
 /** Returns true if and only if all requirements for the given skill element are completed. */
 function skillElementIsUnlocked(element: JQuery<HTMLElement>) {
-    const requirements = element.data("requirement");
+    const requirements = element.data("requirements");
     if (requirements !== undefined) {
         for (let requirementID of requirements.split(" ")) {
             const requirementMet = Skill.forID(requirementID)?.isCompleted ?? true;
@@ -119,9 +117,9 @@ function openDetailsForSkillElement(element: JQuery<HTMLElement>) {
         if (locked || i > Profile.current.skillState(skillID).currentLevel) {
             levelList += `<li class="level-locked">${levelName}</li>`;
         } else if (i == Profile.current.skillState(skillID).currentLevel) {
-            levelList += `<li class="level-current"><a href="${level.page}.html?skill=${skillID}&level=${i}">${levelName}</a></li>`;
+            levelList += `<li class="level-current"><a href="${level.pageURL}">${levelName}</a></li>`;
         } else {
-            levelList += `<li class="level-completed"><a href="${level.page}.html?skill=${skillID}&level=${i}">${levelName}</a></li>`;
+            levelList += `<li class="level-completed"><a href="${level.pageURL}">${levelName}</a></li>`;
         }
     }
 
@@ -147,8 +145,10 @@ function openDetailsForSkillElement(element: JQuery<HTMLElement>) {
     
     element.tooltip({
         content: tooltipContent,
-        hide: { effect: "fade", duration: 500 },
-        close: function() { window.setTimeout(() => $(this).tooltip("destroy"), 500); }
+        position: { my: "center top", at: "center bottom" },
+        show: { effect: "fade", duration: 700 },
+        hide: { effect: "fade", duration: 700 },
+        close: function() { window.setTimeout(() => $(this).tooltip("destroy"), 700); }
     });
     element.attr("title", "");
 
@@ -163,12 +163,21 @@ function openDetailsForSkillElement(element: JQuery<HTMLElement>) {
 }
 
 function closeAllSkillDetails() {
-    $(".skill").each(function() {
-        $(this).removeClass("skill-open");
+    $(".skill-open").each(function() {
         if ($(this).tooltip("instance") !== undefined) {
             $(this).tooltip("close");
         }
+        $(this).removeClass("skill-open");
     })
+}
+
+function centerOnElement(element: JQuery<HTMLElement>) {
+    console.log(element.offset()!.left);
+    console.log(element.width()!);
+    console.log($(window).width()!);
+    console.log(element.offset()!.left + element.width()!/2 - $(window).width()!/2);
+    $(window).scrollLeft(element.offset()!.left + element.width()!/2 - $(window).width()!/2);
+    $(window).scrollTop(element.offset()!.top + element.height()!/2 - $(window).height()!/2);
 }
 
 function updateProfileButton() {
@@ -276,13 +285,15 @@ $(document).ready(function() {
         openDetailsForSkillElement($(this));
 
         //finally, prevent tooltip clicks from bubbling up to body and closing the very tooltips they were trying to interact with
-        $(".skillDetails").on("click touchend", function(event) { event.stopPropagation(); });
+        $(".skillDetails").parent().parent().on("click touchend", function(event) { event.stopPropagation(); });
     });
 
     const params = new URLSearchParams(location.search);
-    let skillID = params.get("skill");
+    const skillID = params.get("skill");
     if (skillID !== null) {
-        openDetailsForSkillElement($("#" + skillID));
+        const skill = $("#" + skillID);
+        openDetailsForSkillElement(skill);
+        centerOnElement(skill);
     }
 });
 

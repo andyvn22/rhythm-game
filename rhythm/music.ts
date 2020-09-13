@@ -176,11 +176,10 @@ class MusicEvent {
 
 	accuracy(tempo: Tempo) {
 		assert(tempo > 0);
-		function easeInOutSine(x: number): number { return -(Math.cos(Math.PI * x) - 1) / 2; }
 
 		if (this.shouldPerform) {
 			if (this.bestPerformanceAttempt === undefined) { return 0; }
-			return easeInOutSine(Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0));
+			return Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0);
 		} else {
 			if (this.bestPerformanceAttempt === undefined) { return 1; }
 			else return 0;
@@ -626,9 +625,9 @@ class TimingDescription {
 
 		let offset = (closestCount.timing - fractionalTiming) * Player.beatLength(tempo);
 		let precision: TimingPrecision = "on";
-		if (offset > MusicEvent.timingThreshold / 2) {
+		if (offset > MusicEvent.timingThreshold / 4) {
 			precision = "a little after";
-		} else if (offset < -MusicEvent.timingThreshold / 2) {
+		} else if (offset < -MusicEvent.timingThreshold / 4) {
 			precision = "a little before";
 		}
 
@@ -843,7 +842,7 @@ class Block {
 	/** Returns the specified number of measures, randomly generated from the given blocks, respecting the time signature and `required` property */
 	static randomMeasures(timeSignature: TimeSignature, measures: number, blocks: Array<Block>) {
 		const requiredBlocks = blocks.filter(x => x.isRequired);
-		assert(measures > requiredBlocks.length);
+		assert(measures >= requiredBlocks.length);
 		const possibleMeasures = Block.allPossibleMeasuresFrom(blocks, timeSignature);
 		
 		let resultMeasures: Array<Array<Note>> = [];
@@ -916,8 +915,9 @@ class Piece {
 		return this.noteEvents.last.timing + this.notes[this.notes.length-1].relativeLength(this.timeSignature.bottom);
 	}
 
+	/** Returns a reference note to use when considering how far to space out the music. Never returns whole note, though; that's too squished. */
 	get maxNoteType() {
-		let result = 1;
+		let result = 2;
 		for (let note of this.notes) {
 			result = Math.max(result, note.type.rawValue);
 		}
@@ -1052,21 +1052,21 @@ class Piece {
 			currentBeat += noteLength;
 			previousBeams = beamsOut;
 		}
-		return result + Piece.finalBarlineCharacter;
+		return result + `<span id="${this.idForNoteIndex(this.notes.length)}">${Piece.finalBarlineCharacter}</span>`;
 	}
 
 	private metricsForIndices(startIndex: number, endIndex: number) {
 		assert(startIndex >= 0);
 		assert(startIndex < this.notes.length);
 		assert(endIndex >= 0);
-		assert(endIndex < this.notes.length);
+		assert(endIndex <= this.notes.length); //final barline could be equal to length
 
 		const startElement = $("#" + this.idForNoteIndex(startIndex));
 		const endElement = $("#" + this.idForNoteIndex(endIndex));
 		
 		const earlierIndex = Math.min(startIndex, endIndex);
 		const laterIndex = Math.max(startIndex, endIndex);
-		const crossesBarline = this.noteEvents.index(laterIndex).timing % this.timeSignature.top == 0;
+		const crossesBarline = laterIndex != this.notes.length && this.noteEvents.index(laterIndex).timing % this.timeSignature.top == 0;
 		const beatLength = this.notes[earlierIndex].relativeLength(this.timeSignature.bottom) + (crossesBarline ? 1 : 0);
 		const pixelOffset = endElement.position().left - startElement.position().left;
 
@@ -1095,12 +1095,8 @@ class Piece {
 				return 0;
 			}
 		} else {
-			if (noteIndex < this.notes.length - 1) {
-				const metrics = this.metricsForIndices(noteIndex, noteIndex + 1);
-				return (offset / metrics.beatLength) * metrics.pixelOffset;
-			} else {
-				return offset * em(5); //just guessing
-			}
+			const metrics = this.metricsForIndices(noteIndex, noteIndex + 1);
+			return (offset / metrics.beatLength) * metrics.pixelOffset;
 		}
 	}
 
@@ -1291,6 +1287,7 @@ interface Playback {
 	startTime: number;
 	nextNote: number;
 	timerID: number;
+	lastClap: number;
 }
 
 /**
@@ -1300,11 +1297,23 @@ class Player {
 	private _piece: Piece;
 	get piece() { return this._piece; }
 	set piece(newValue: Piece) {
+		if (this.isPlaying) {
+			this.stop();
+		}
 		this._piece = newValue;
-		this.playback = undefined;
+		this.backingLoop = Sound.backingLoop(newValue.timeSignature, this.tempo, newValue.backingLoopIndex);
 	}
 
-	tempo: Tempo;
+	private _tempo: Tempo;
+	get tempo() { return this._tempo; }
+	set tempo(newValue: Tempo) {
+		if (this.isPlaying) {
+			this.stop();
+		}
+		this._tempo = newValue;
+		this.backingLoop = Sound.backingLoop(this.piece.timeSignature, newValue, this.piece.backingLoopIndex);
+	}
+
 	private backingLoop?: Sound;
 
 	/** Called when the player starts playback. */
@@ -1320,8 +1329,8 @@ class Player {
 
 	constructor(piece: Piece, tempo: Tempo) {
 		this._piece = piece;
-		this.tempo = tempo;
-		this.backingLoop = Sound.backingLoop(piece.timeSignature, tempo);
+		this._tempo = tempo;
+		this.backingLoop = Sound.backingLoop(piece.timeSignature, tempo, piece.backingLoopIndex);
 	}
 
 	get isPlaying() { return this.playback !== undefined; }
@@ -1345,7 +1354,8 @@ class Player {
 		this.playback = {
 			startTime: Date.now() + delayUntilStart,
 			nextNote: (countOff ? -this.piece.timeSignature.countoff.notes.length : 0),
-			timerID: NaN //will replace momentarily
+			timerID: NaN, //will replace momentarily
+			lastClap: -Infinity
 		};
 
 		this.playNote();
@@ -1380,9 +1390,12 @@ class Player {
 		if (this.isCountingOff || !this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
 
-		const clapTime = (Date.now() - Player.synchronizationHack - this.playback.startTime) / Player.beatLength(this.tempo);
+		const clapTime = (Date.now() - Player.synchronizationHack - this.playback.startTime);
+		const debounceTime = 100;
+		if (clapTime - this.playback.lastClap <= debounceTime) { return; }
+		this.playback.lastClap = clapTime;
 
-		const affectedIndices = this.piece.noteEvents.gradePerformanceAttempt(clapTime);
+		const affectedIndices = this.piece.noteEvents.gradePerformanceAttempt(clapTime / Player.beatLength(this.tempo));
 		for (let i of affectedIndices) {
 			if (i == this.piece.notes.length) { continue; }
 			this.piece.updateAppearanceOfNoteAtIndex(i, this.tempo);
@@ -1466,7 +1479,7 @@ class Player {
 			} else {
 				newScrollPosition = nextNoteElement[0].offsetLeft;
 			}
-			noteElement.parent().animate({ scrollLeft: newScrollPosition - scrollMargin }, nextNoteTime - Date.now());
+			noteElement.parent().animate({ scrollLeft: newScrollPosition - scrollMargin }, nextNoteTime - Date.now(), "linear");
 		}
 		
 		var self = this;
