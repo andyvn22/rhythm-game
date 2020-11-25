@@ -25,7 +25,14 @@ jQuery.fn.extend({
     }
 });
 
-function showGradeSummary() {
+interface DialogButton {
+    text: string;
+    icon: string;
+    click: () => void;
+    class?: string;
+}
+
+function showGradeSummary(gradingInfo = player.piece.gradingInfo(player.tempo)) {
     assert(player.tempo > 0);
 
     function formatAccuracy(accuracy: number) {
@@ -50,7 +57,6 @@ function showGradeSummary() {
         return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
     }
 
-    const gradingInfo = player.piece.gradingInfo(player.tempo);
     const summaryElement = `
         <div id="gradeSummary" title="Your Performance">
             <dl style="display: grid">
@@ -65,7 +71,7 @@ function showGradeSummary() {
         </div>
     `;
 
-    let buttons = [{
+    let buttons: Array<DialogButton> = [{
         text: "Grade Details",
         icon: "ui-icon-search",
         click: function() {
@@ -74,11 +80,20 @@ function showGradeSummary() {
         }
     }];
     if (gradingInfo.passed) {
-        buttons.push({
-            text: "Next Level!",
-            icon: "ui-icon-star",
-            click: PieceLevel.goToNext
-        });
+        if (Skill.current!.isCompleted) {
+             buttons.push({
+                 text: "Next Skill!",
+                 icon: "ui-icon-key",
+                 click: PieceLevel.exit,
+                 class: "nextSkillButton"
+             })
+        } else {
+            buttons.push({
+                text: "Next Level!",
+                icon: "ui-icon-star",
+                click: PieceLevel.goToNext
+            });
+        }
     } else {
         buttons.push({
             text: "Try Again",
@@ -112,7 +127,11 @@ function showGradeSummary() {
 
 $(document).ready(function() {
     PieceLevel.initializePage();
-    player.piece.timeSignature.countoff; //preload countoff sounds
+
+    //preload sounds
+    Sound.metronome;
+    Sound.fanfare;
+    player.piece.timeSignature.countoff;
 
     $("#play").button({
         label: "<strong>Play</strong>",
@@ -164,9 +183,18 @@ $(document).keydown(function(event) {
                 stop();
             }
             break;
-        case $.ui.keyCode.PERIOD: //cheat
+        case $.ui.keyCode.PERIOD: //cheat pass
             PieceLevel.pass();
-            showGradeSummary();
+            showGradeSummary({
+                clapAccuracy: 1,
+                tapAccuracy: 1,
+                timingAccuracy: 1,
+                passed: true,
+                summary: "You cheated!"
+            });
+            break;
+        case $.ui.keyCode.COMMA: //cheat fail back to here
+            Profile.current.skillState(Skill.current!.id).currentLevel = PieceLevel.current.index;
             break;
         default:
     }

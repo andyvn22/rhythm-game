@@ -69,11 +69,11 @@ JGSW:
     + Override `updateTooltipForNoteAtIndex` to provide clearer explanations for rests
 + Swap out ion.sound; it's broken and it's time for type safety anyway
     + Preload performance sounds, though
-* Add a working backing loop system
++ Add a working backing loop system
     + Can you scale to account for tempos?
     + Perfectly align scoring with backing loops (right now you have to rush to pass)
-    - Flesh out your loop library: we need more time signatures!
-    - Allow for multiple loops per time signature, and come up with a clever way of determining index into that array via skill ID and level number, so that it's not Just Random
+    + Flesh out your loop library: we need more time signatures!
+    + Allow for multiple loops per time signature, and come up with a clever way of determining index into that array via skill ID and level number, so that it's not Just Random
 + Fix count placement: estimating for the final note using the previous note is totally ineffective; check eighth eighth dotted half for proof.
 + Fix extra problems caused by held key repeats
 + Only count rests if they're on a beat (hah--you made the same mistake your students do!)
@@ -97,46 +97,59 @@ JGSW:
 + Show total levels in skill in the title bar for the start window
 + Make "Next Level" go directly to the next level
 + Show level icon on intro window
-+ Fix scrolling easing
 
+FOR RELEASE:
 - Create the actual skill tree
-    - Split Eighth Notes into two skills, focus on eighth rests for longer
-    - Double levels in the Dots skill--really drill dotted quarters
-    - Double levels in the Top Number skill
-    - Split Sixteenth Notes into three skills, one per rhythm
-    - Double levels in Three Four
+    - Reconsider "building up to it" template for most advanced syncopation skill
+    - Add a whole second compound 16th note skill, including dots and multiple splits
 
-- Add cool visuals
-    - Space background for world? How can you tie levels into this?
-        - Each skill is a planet. Completing levels is "exploring" the planet. Different skills have different backgrounds to match their planet icons?
-    - Animation for right/wrong notes while playing
-    - Animation for celebrating when you complete a skill/unlock a new one
-- Can you store all player progress in a URL? This could allow switching devices!
-- Accounts saved on server? based on hash of email; switching accounts on main page
-	- If this isn't viable, how can you learn of students' progress?
-
-- MOAR LOOPS!!!11
-- Ties
-- Can you check counts via speech recognition?
-- Add a link to explain why a note has the count it does
-- Allow special nodes to include multiple choice or matching quizzes (for note recognition & beat length in time signatures)
-
-POLISH:
-- Test thoroughly on Internet Explorer--I hear closure capture within loops causes problems, and you totally do that
-- Why did you have to delete the word "export" from howler/index.d.ts every time it occurs to fix the build?
++ Fix scrolling easing
++ Do not grade an extra foot tap, accurately timed for beat 1 after the piece ends, as wrong. This should actually be encouraged.
++ Fix beaming of pieces with 3rds in them--dang, that was a nasty hack. You had to round off a bunch of beat calculations to adjust for floating point errors.
++ Fix beaming of over-the-beat eighth notes (like EVERYTHING in the "More Faster Syncopation" skill)
++ Animation for celebrating when you complete a skill in the tree!
++ What makes world.html super-slow on load from finishing a skill sometimes, and it gets fixed instantly when you reload!? ARGH.
+    + Oh. It's the filter: drop-shadow that I applied to my svg elements. Darn.
+- Make your own font, because the Rhythms creator didn't respond to your usage request, and because it's missing 6/8 16th characters.
+    - First, test if Dorico's font is usable as-is.
+    - If not, try to fix Dorico's metrics as a starting point.
+- Add save URLs so students can switch computers, and so that you can use them as your proof of student progress
 - Fix spacing bug: it seems that offscreen objects don't work with your count/clap placement code.
     - Is this your fault or a limitation of the browser?
     - Can you use `div`s instead of `span`s for your notes, and if so, can you position relative to them? Does that even help?
-- Give every glyph a special offset so that counts can be PERFECTLY aligned
+- Allow special nodes to include multiple choice or matching quizzes (for note recognition & beat length in time signatures)
+- Is it possible to find out audio latency and adjust accordingly? If so, great--just do it. Otherwise...
+    - Is it possible to detect wireless headphones? Add a warning if you detect them.
+    - Add a warning at the start of the game about wireless headphones.
+    - Test when scoring if it looks like the player's having latency issues, and warn about wireless headphones then.
+- Test thoroughly:
+    - On iPhone
+    - On Chrome
+    - On Firefox
+    - On Internet Explorer
+    - On Android
+
+POST-RELEASE:
+- Can you check counts via speech recognition?
+- MOAR LOOPS!!!11
+- Randomly select from MANY grading summary messages; students will see them very frequently so they should be varied.
+    - Include praise for hard work & suggestion of going back to earlier levels.
 - Improve style and content of grading tooltips; focus on important content
-- Write tests that check that all your skills are in the skill tree and all your time signatures have backing loops
++ Cancel scrolling of piece immediately when you click "Stop"
+- Give every glyph a special offset so that counts can be PERFECTLY aligned
+- Close tooltips on manual scroll of music in piece.html
 - Create an option to practice a level at a slower tempo
 - Create an option to practice certain measures from a level
+- Improve playback/scrolling performance when extra claps are afoot
 - Create a guided review of mistakes, suggested in the final score summary
-- Get permission to host the Rhythms font for this project, or make your own
-	- I'm concerned about spacing. :( You might need to make a custom font.
-- Randomly select from many grading summary messages; students will see them very frequently so they should be varied.
-- Move counts & extra claps & anything else relatively positioned when you resize the window
-    - Can you achieve this automatically by using em positioning, or attaching them to note spans instead of the parent container?
-- What the heck is the deal with HTML nowadays? There are way more kinds of elements than you remember. Are you using them appropriately?
-- Close tooltips on manual scroll
+- Rotate every page on a phone at weird times and see what breaks
+
+POLISH:
+- Why did you have to delete the word "export" from howler/index.d.ts every time it occurs to fix the build?
+- Write tests that check that all your skills are in the skill tree and all your time signatures have backing loops
+- What the heck is the deal with HTML nowadays?
+
+UNICORNS:
+- Ties
+- Triplets
+- Mixed meter

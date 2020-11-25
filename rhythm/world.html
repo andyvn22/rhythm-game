@@ -20,29 +20,38 @@
 		html, body {
 			min-height: 100%;
 			text-align: center;
+            padding: 0;
+            margin: 0;
 
 			user-select: none;
 			-webkit-user-select: none;
 			cursor: default;
 
             position: relative;
+            z-index: -1000;
+            background-color: black;
+            background-image: url("media/space.jpg");
 		}
+
+        div.ui-widget-overlay.ui-front {
+            background: black !important;
+        }
 
         #requirements, #requirements-disabled {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%; /* height set in JS */
-            z-index: -1000;
+            z-index: -500;
         }
 
-        #requirements {
-            filter: drop-shadow(1px 1px 4px black);
+        /* Too slow. */
+        /*#requirements {
+            filter: drop-shadow(0 0 0.5em rgb(255, 255, 255));
         }
 
         #requirements-disabled {
-            filter: drop-shadow(1px 1px 4px gray);
-        }
+            filter: drop-shadow(0 0 0.5em rgb(94, 94, 94));
+        }*/
 
         #skillTree {
             max-width: 70em;
@@ -55,6 +64,19 @@
             display: flex;
             justify-content: space-evenly;
             padding: 4vw;
+        }
+
+        .finishedSkill {
+            color: rgb(145, 122, 76);
+            font-weight: bold;
+        }
+
+        .nextSkillButton, .nextSkillButton:focus {
+            color: rgb(173, 148, 100);
+        }
+
+        .nextSkillButton:hover {
+            color: rgb(233, 206, 156);
         }
 
         /**********/
@@ -70,7 +92,6 @@
         .skill {
             padding: 1em 0.2em;
             border-radius: 4px;
-            box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.7), inset 0.2em 0.2em 0.2em rgba(255, 255, 255, 0.6), inset -0.2em -0.2em 0.2em rgba(0, 0, 0, 0.6);
 
             text-align: center;
             font-weight: bold;
@@ -85,12 +106,11 @@
 
         .skill-open {
 			text-shadow: 0.1em 0.1em 0.2em white, -0.1em -0.1em 0.2em black;
-            box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.7), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
         }
 
         .skill-completed {
-            border-color: #dbcfb5;
             color: #fff1c6;
+            box-shadow: 0em 0em 1em rgba(255, 241, 203, 0.7), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
             background: linear-gradient(to bottom right, #cfc09f 0%,#ffecb3 25%,#3a2c0f 100%);
         }
 
@@ -99,12 +119,13 @@
         }
 
         .skill-completed.skill-open, .skill-completed.skill-open:hover {
+            box-shadow: 0em 0em 2em rgba(255, 241, 203, 0.7), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
             background: linear-gradient(to top left, #cfc09f 0%,#ffecb3 25%,#3a2c0f 100%);
         }
 
         .skill-current {
-            border-color: white;
             color: white;
+            box-shadow: 0em 0em 1.5em rgba(255, 255, 255, 1.0), inset 0.2em 0.2em 0.2em rgba(255, 255, 255, 0.6), inset -0.2em -0.2em 0.2em rgba(0, 0, 0, 0.6);
             background: linear-gradient(to bottom right, #9fa6cf 0%,#080052 100%);
         }
 
@@ -114,12 +135,13 @@
 
         .skill-current.skill-open, .skill-current.skill-open:hover {
             background: linear-gradient(to top left, #9fa6cf 0%,#080052 100%);
+            box-shadow: 0em 0em 2em rgba(255, 255, 255, 1.0), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
         }
 
         .skill.skill-locked {
-            border-color: rgb(230, 230, 230);
-            color: rgb(243, 243, 243);
-            background: rgb(216, 216, 216);
+            border: 2px solid rgb(158, 158, 158);
+            color: rgb(184, 184, 184);
+            background: rgb(107, 107, 107);
             text-shadow: none;
             box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.3);
         }
@@ -257,33 +279,78 @@
             <div class="skill" id="quarterNotes" data-requirements="halfNotes"></div>
         </div>
         <div class="row">
+            <div class="spacer"></div>
             <div class="skill" id="eighthNotes" data-requirements="quarterNotes"></div>
             <div class="skill" id="topNumber" data-requirements="quarterNotes"></div>
-        </div>
-        <div class="row">
-            <div class="skill" id="sixteenthNotes" data-requirements="eighthNotes"></div>
-            <div class="skill" id="dots" data-requirements="eighthNotes topNumber"></div>
             <div class="spacer"></div>
         </div>
         <div class="row">
+            <div class="skill" id="sixteenthNotes1" data-requirements="eighthNotes"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="eighthRests" data-requirements="eighthNotes"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="quarterNoteChallenge" data-requirements="topNumber"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes2" data-requirements="sixteenthNotes1"></div>
+            <div class="skill" id="sixteenthNotes3" data-requirements="sixteenthNotes1"></div>
+            <div class="skill" id="syncopation" data-requirements="eighthRests topNumber"></div>
+            <div class="skill" id="dots" data-requirements="eighthRests topNumber"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes4" data-requirements="sixteenthNotes2 sixteenthNotes3"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="eighthNoteChallenge" data-requirements="dots"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes5" data-requirements="sixteenthNotes4 dots"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="syncopation2" data-requirements="syncopation dots"></div>
             <div class="skill" id="bottomNumber" data-requirements="dots"></div>
-            <div class="skill" id="moreSixteenths" data-requirements="sixteenthNotes dots"></div>
-            <div class="skill" id="moreEighths" data-requirements="dots"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNoteChallenge" data-requirements="sixteenthNotes5"></div>
+            <div class="skill" id="syncopation3" data-requirements="sixteenthNotes5 syncopation"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="cutTime" data-requirements="bottomNumber"></div>
+            <div class="skill" id="compoundTime1" data-requirements="bottomNumber"></div>
+            <div class="spacer"></div>
             <div class="skill" id="threeFour" data-requirements="dots"></div>
         </div>
         <div class="row">
-            <div class="skill" id="compoundTime" data-requirements="bottomNumber"></div>
-            <div class="skill" id="cutTime" data-requirements="bottomNumber"></div>
-            <div class="skill" id="syncopation" data-requirements="moreSixteenths moreEighths"></div>
-            <div class="skill" id="fiveFour" data-requirements="threeFour moreEighths"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="syncopation4" data-requirements="syncopation2 syncopation3"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="nineEight" data-requirements="compoundTime1"></div>
+            <div class="skill" id="compoundTime2" data-requirements="compoundTime1"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
         </div>
         <div class="row">
-            <div class="skill" id="advancedCompoundTime" data-requirements="compoundTime syncopation"></div>
-            <div class="skill" id="advancedCutTime" data-requirements="cutTime syncopation"></div>
-            <div class="skill" id="compoundSingle" data-requirements="compoundTime fiveFour"></div>
+            <div class="skill" id="syncopationChallenge" data-requirements="syncopation4"></div>
+            <div class="skill" id="cutTime2" data-requirements="cutTime syncopation4"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="compoundSingle" data-requirements="compoundTime2 threeFour"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="fiveFour" data-requirements="threeFour"></div>
         </div>
         <div class="row">
-            <div class="skill" id="rhythmMaster" data-requirements="advancedCompoundTime advancedCutTime compoundSingle"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="compoundTime3" data-requirements="compoundSingle nineEight syncopation4"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="everythingChallenge" data-requirements="cutTime2 fiveFour compoundTime3"></div>
         </div>
     </div>
 

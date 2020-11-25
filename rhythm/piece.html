@@ -30,6 +30,11 @@
 			-webkit-user-select: none;
 			cursor: default;
 		}
+
+		body {
+			background-image: url("media/paper.gif");
+			padding-top: 2em;
+		}
 		
 		#staff {
 			font-family: "Rhythms";
@@ -39,6 +44,10 @@
 			overflow: scroll;
 			white-space: nowrap;
 			position: relative;
+		}
+
+		#staff .note {
+			letter-spacing: -0.035em; /* hack for Rhythms font dotted eighth note beams reaching each other */
 		}
 		
 		.extraClap, .extraTap {
@@ -115,6 +124,14 @@
 			color: rgb(121, 89, 21);
 			border: 2px solid rgb(145, 111, 37);
 			padding: 0.2em;
+		}
+
+		.nextSkillButton, .nextSkillButton:focus {
+			color: rgb(173, 148, 100);
+		}
+
+		.nextSkillButton:hover {
+			color: rgb(233, 206, 156);
 		}
 	</style>
     <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>

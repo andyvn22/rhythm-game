@@ -22,9 +22,19 @@ function em(em: number, relativeTo = document.body) {
 	return parseFloat(getComputedStyle(relativeTo).fontSize) * em;
 }
 
+function nudgeFloat(input: number) {
+	const epsilon = 0.00001;
+	if (Math.abs(input - Math.round(input)) < epsilon) {
+		return Math.round(input);
+	} else {
+		return input;
+	}
+}
+
 /**
  * A sound effect that can be audibly played, such as a click, part of a countoff, or a backing loop.
  * 
+ * Sounds are preloaded at initialization.
  * I don't have the slightest idea why, but you need to delete all instances of "export" in howler/index.d.ts for this to compile... :(
  */
 class Sound {
@@ -64,13 +74,14 @@ class Sound {
 	static get go() { return new Sound("go"); }
 
 	static get fanfare() { return new Sound("fanfare"); }
+	static get success() { return new Sound("success"); }
 
 	/**
 	 * Creates and returns a backing loop appropriate for the given time signature and tempo.
 	 * 
 	 * This is not a pure function; save your backing loop instance if you need to stop it later.
 	 */
-	static backingLoop(timeSignature: TimeSignature, tempo: Tempo, index?: number): Sound | undefined {
+	static backingLoop(timeSignature: TimeSignature, tempo: Tempo, index?: number): Sound {
 		function indexTo(upperBound: number) {
 			if (index !== undefined) {
 				return index % upperBound;
@@ -90,8 +101,8 @@ class Sound {
 		} else {
 			switch(timeSignature.top) {
 				case 2: case 4:
-					return new Sound(`loops/simpleQuadruple/${indexTo(3)}`, true, rate);
-				case 3: return new Sound(`loops/simpleTriple/${indexTo(2)}`, true, rate);
+					return new Sound(`loops/simpleQuadruple/${indexTo(8)}`, true, rate);
+				case 3: return new Sound(`loops/simpleTriple/${indexTo(3)}`, true, rate);
 				case 5: return new Sound(`loops/simpleQuintuple/${indexTo(2)}`, true, rate);
 			}
 		}
@@ -99,7 +110,7 @@ class Sound {
 	}
 }
 
-type Tempo = 60 | 80 | 100;
+type Tempo = 40 | 60 | 80 | 100 | 120;
 
 /**
  * An event (like a note or beat), whose timing is specified in absolute beats from the start of a piece
@@ -191,8 +202,8 @@ class MusicEvent {
 		assert(length > 0);
 		
 		let result = [];
-		for (let i = Math.ceil(this.timing); i < this.timing + length; i++) {
-			result.push(i - this.timing);
+		for (let i = Math.ceil(this.timing); i < nudgeFloat(this.timing + length); i++) {
+			result.push(nudgeFloat(i - this.timing));
 		}
 		return result;
 	}
@@ -205,10 +216,12 @@ class MusicEvent {
  */
 class EventList {
 	private value: Array<MusicEvent>
+	readonly ignoreLastEvent: boolean;
 
 	/** Creates a new list of the specified events. The given events must be in chronological order. */
-	constructor(events: Array<MusicEvent>) {
+	constructor(events: Array<MusicEvent>, ignoreLastEvent = false) {
 		this.value = events;
+		this.ignoreLastEvent = ignoreLastEvent;
 	}
 
 	index(index: number) {
@@ -287,6 +300,11 @@ class EventList {
 
 	gradingInfo(tempo: Tempo) {
 		assert(tempo > 0);
+
+		if (this.ignoreLastEvent) {
+			this.value[this.value.length-1].removeAllPerformanceAttempts();
+			this.value[this.value.length-1].addPerformanceAttempt(0);
+		}
 
 		const successes = this.value.filter(x => x.accuracy(tempo) > 0);
 		const extraAttempts = this.value.reduce((a,b) => a + b.extraPerformanceAttempts.length, 0);
@@ -429,7 +447,7 @@ class Note {
 		return this.description;
 	}
 
-	notation(beamsIn: 0 | 1 | 2 = 0, beamsOut: 0 | 1 | 2 = 0) {
+	notation(beamsIn: NoteTypeBeams = 0, beamsOut: NoteTypeBeams = 0) {
 		const result = (beamsIn == 0 && beamsOut == 0) ? this.type.unbeamedCharacter : NoteType.beamedCharacter(beamsIn, beamsOut);
 		return this.customPrefix + result + Note.dots(this.dots) + this.customSuffix;
 	}
@@ -614,7 +632,7 @@ class TimingDescription {
 		if (Math.abs(1 - fractionalTiming) < Math.abs(closestCount.timing - fractionalTiming)) {
 			closestCount = Count.beat;
 			beat++;
-			fractionalTiming = 1 - fractionalTiming;
+			fractionalTiming = fractionalTiming - 1;
 		}
 
 		if (closestCount.isEqual(Count.and) && timeSignature.isCompound) {
@@ -623,7 +641,8 @@ class TimingDescription {
 			closestCount = Count.and;
 		}
 
-		let offset = (closestCount.timing - fractionalTiming) * Player.beatLength(tempo);
+		let offset = (fractionalTiming - closestCount.timing) * Player.beatLength(tempo);
+
 		let precision: TimingPrecision = "on";
 		if (offset > MusicEvent.timingThreshold / 4) {
 			precision = "a little after";
@@ -680,7 +699,7 @@ class TimeSignature {
 		assert(bottom.dots <= 1);
 		
 		this.top = top;
-		this.bottom = bottom;
+		this.bottom = bottom.normalized;
 	}
 
 	static get twoFour() { return new TimeSignature(2, Note.quarter); }
@@ -689,7 +708,7 @@ class TimeSignature {
 	static get fiveFour() { return new TimeSignature(5, Note.quarter); }
 
 	static get commonTime() { return TimeSignature.fourFour; }
-	static get cutTime() { return new TimeSignature(4, Note.quarter); }
+	static get cutTime() { return new TimeSignature(2, Note.half); }
 
 	static get sixEight() { return new TimeSignature(2, Note.quarter.dotted); }
 	static get nineEight() { return new TimeSignature(3, Note.quarter.dotted); }
@@ -715,7 +734,7 @@ class TimeSignature {
 			rea = this.bottom.halved;
 			dy = this.bottom.halved;
 		}
-		let go = this.bottom;
+		let go = this.bottom.copy();
 		
 		rea.sound = Sound.readyFirstSyllable;
 		dy.sound = Sound.readySecondSyllable;
@@ -894,14 +913,15 @@ class Piece {
 		for (let note of this.notes) {
 			noteEvents.push(new MusicEvent(timing, !(note instanceof Rest)));
 			timing += note.relativeLength(timeSignature.bottom);
+			timing = nudgeFloat(timing);
 		}
 		this.noteEvents = new EventList(noteEvents);
 
 		let beatEvents: Array<MusicEvent> = [];
-		for (let beat = 0; beat < timing; beat++) {
+		for (let beat = 0; beat <= timing; beat++) {
 			beatEvents.push(new MusicEvent(beat));
 		}
-		this.beatEvents = new EventList(beatEvents);
+		this.beatEvents = new EventList(beatEvents, true);
 
 		this.backingLoopIndex = backingLoopIndex;
 	}
@@ -1011,8 +1031,9 @@ class Piece {
 			
 			const note = this.notes[i];
 			const noteLength = note.relativeLength(this.timeSignature.bottom);
-			const willCrossBeat = Math.floor(currentBeat) != Math.floor(currentBeat + noteLength) || i == this.notes.length - 1;
-			const nextBeams = willCrossBeat || this.notes[i+1] instanceof Rest ? 0 : this.notes[i+1].type.beams;
+			const isAtEnd = i == this.notes.length - 1;
+			const willCrossBeat = Math.floor(currentBeat) != Math.floor(nudgeFloat(currentBeat + noteLength)) && nudgeFloat(currentBeat + noteLength) == Math.floor(nudgeFloat(currentBeat + noteLength));
+			const nextBeams = isAtEnd || willCrossBeat || this.notes[i+1] instanceof Rest ? 0 : this.notes[i+1].type.beams;
 			
 			let beamsIn: NoteTypeBeams;
 			let beamsOut: NoteTypeBeams;
@@ -1026,30 +1047,27 @@ class Piece {
 			} else if (nextBeams == 0) {
 				beamsIn = note.type.beams;
 				beamsOut = 0;
-			} else if (previousBeams == note.type.beams || nextBeams == note.type.beams) {
-				beamsIn = previousBeams;
-				beamsOut = nextBeams;
 			} else if (previousBeams > note.type.beams && nextBeams > note.type.beams) {
 				beamsIn = note.type.beams;
 				beamsOut = note.type.beams;
 			} else {
 				const minorRhythmFactor = this.timeSignature.bottom.relativeLength(note.undotted.doubled)
-				const willCrossMinorRhythmicBoundary = Math.floor(currentBeat * minorRhythmFactor) != Math.floor((currentBeat + noteLength) * minorRhythmFactor);
+				const willCrossMinorRhythmicBoundary = Math.floor(currentBeat * minorRhythmFactor) != Math.floor((currentBeat + noteLength) * minorRhythmFactor) && (currentBeat + noteLength) * minorRhythmFactor == Math.floor((currentBeat + noteLength) * minorRhythmFactor);
 				if (willCrossMinorRhythmicBoundary) {
 					beamsIn = note.type.beams;
-					beamsOut = nextBeams;
+					beamsOut = Math.min(nextBeams, note.type.beams) as 0 | 1 | 2;
 				} else {
-					beamsIn = previousBeams;
+					beamsIn = Math.min(previousBeams, note.type.beams) as 0 | 1 | 2;
 					beamsOut = note.type.beams;
 				}
 			}
 			
-			result += `<span id="${this.idForNoteIndex(i)}" title="">${note.notation(beamsIn, beamsOut)}</span>`;
+			result += `<span class="note" id="${this.idForNoteIndex(i)}" title="">${note.notation(beamsIn, beamsOut)}</span>`;
 			if (beamsIn == 0 && beamsOut == 0) {
 				result += this.appropriateSpaces(note);
 			}
 			
-			currentBeat += noteLength;
+			currentBeat = nudgeFloat(currentBeat + noteLength);
 			previousBeams = beamsOut;
 		}
 		return result + `<span id="${this.idForNoteIndex(this.notes.length)}">${Piece.finalBarlineCharacter}</span>`;
@@ -1314,7 +1332,7 @@ class Player {
 		this.backingLoop = Sound.backingLoop(this.piece.timeSignature, newValue, this.piece.backingLoopIndex);
 	}
 
-	private backingLoop?: Sound;
+	private backingLoop: Sound;
 
 	/** Called when the player starts playback. */
 	onPlay = function() {};
@@ -1372,6 +1390,7 @@ class Player {
 		clearTimeout(this.playback.timerID);
 		this.backingLoop?.stop();
 		this.playback = undefined;
+		this.playerElement.stop(true);
 		this.piece.showTooltips(true);
 		this.onStop();
 	}
@@ -1382,8 +1401,12 @@ class Player {
 	rewind() {
 		assert(!this.isPlaying);
 
-		const playerElement = $("#" + this.piece.idForNoteIndex(0));
-		playerElement.parent().animate({ scrollLeft: 0 }, 1000);
+		this.playerElement.animate({ scrollLeft: 0 }, 1000);
+	}
+
+	/** The jQuery element on the page this player is controlling */
+	get playerElement() {
+		return $("#" + this.piece.idForNoteIndex(0)).parent();
 	}
 
 	gradeClap() {
