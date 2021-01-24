@@ -2,52 +2,38 @@
 <html>
 <head>
 	<meta charset="utf-8"/>
-	<meta name="viewport" content="width=device-width"/>
+	<meta name="viewport" content="width=device-width, viewport-fit=cover"/>
 	<title>Rhythm Game</title>
 	<link rel="stylesheet" href="include/jquery-ui.css"/>
 	<link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
+	<link rel="stylesheet" href="level.css"/>
 </head>
 <body>
 	<style>
-		@font-face {
-			font-family: "Rhythms";
-			src: url("media/Rhythms.otf");
-		}
-		
-		*,
-		*:before,
-		*:after {
-			-webkit-box-sizing: border-box;
-			-moz-box-sizing: border-box;
-			box-sizing: border-box;
-		}
-		
-		html, body {
-			min-height: 100%;
-			text-align: center;
-
-			user-select: none;
-			-webkit-user-select: none;
-			cursor: default;
-		}
-
-		body {
-			background-image: url("media/paper.gif");
-			padding-top: 2em;
-		}
-		
 		#staff {
-			font-family: "Rhythms";
-			font-size: 10vw;
+			font-family: "Notation";
+			font-size: 12vw;
 			padding-right: 100%;
-			padding-bottom: 0.2em;
-			overflow: scroll;
+			padding-top: 3vw;
+			padding-bottom: 4vw;
+			overflow-x: scroll;
+			overflow-y: hidden;
 			white-space: nowrap;
 			position: relative;
 		}
 
-		#staff .note {
-			letter-spacing: -0.035em; /* hack for Rhythms font dotted eighth note beams reaching each other */
+		/* IE hack */
+		@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+			.ie-padding-hack {
+				width: 7em;
+				display: inline-block;
+				height: 1em;
+			}
+		}
+
+		.note {
+			position: relative;
+			top: 0.3em;
 		}
 		
 		.extraClap, .extraTap {
@@ -93,9 +79,37 @@
 			}
 		}
 
+		@keyframes pulse {
+			from { transform: scale(1.0); }
+			to { transform: scale(1.2); }
+		}
+
+		.introduce {
+			animation-name: pulse; 
+            animation-duration: 1s; 
+            animation-timing-function: ease-in-out; 
+            animation-direction: alternate; 
+            animation-iteration-count: 2; 
+            animation-play-state: running;
+		}
+
+		.require {
+			animation-name: pulse; 
+            animation-duration: 2.0s; 
+            animation-timing-function: ease-in-out; 
+            animation-direction: alternate; 
+            animation-iteration-count: infinite; 
+            animation-play-state: running; 
+		}
+
+		/*****************/
+		/* Grade Summary */
+		/*****************/
+
 		#gradeSummary dl dt {
 			font-weight: 200;
 			margin-bottom: 2em;
+			display: block; /* for IE */
 		}
 
 		#gradeSummary dl dd {
@@ -104,11 +118,38 @@
 			font-weight: 600;
 
 			text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
+			display: block; /* for IE */
+		}
+
+		.tendency-value {
+			text-align: right;
+		}
+
+		#gradeSummary dl {
+			display: grid;
+			display: -ms-grid;
+		}
+
+		#gradeSummary dl dd.tendency-perfect {
+			margin: auto 0.3em;
+			font-size: 6vmin;
+		}
+
+		#gradeSummary dl dd.tendency-text {
+			margin-top: auto;
+			margin-bottom: auto;
+			margin-left: 0;
+			margin-right: 0.6em;
+			font-size: 3.5vmin;
+
+			text-align: left;
 		}
 
 		.star-enabled, .star-disabled {
 			text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
 			font-size: 0.7em;
+			position: relative;
+			top: -0.2em;
 		}
 
 		.star-enabled {
@@ -117,21 +158,6 @@
 
 		.star-disabled {
 			color: rgb(179, 179, 179);
-		}
-
-		.finalLevel {
-			font-size: 0.8em;
-			color: rgb(121, 89, 21);
-			border: 2px solid rgb(145, 111, 37);
-			padding: 0.2em;
-		}
-
-		.nextSkillButton, .nextSkillButton:focus {
-			color: rgb(173, 148, 100);
-		}
-
-		.nextSkillButton:hover {
-			color: rgb(233, 206, 156);
 		}
 	</style>
     <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>

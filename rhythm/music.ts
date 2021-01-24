@@ -12,14 +12,26 @@ function assertionFailure(message = "Assertion failed: unreachable code"): never
 	throw message;
 }
 
+function isInternetExplorer() {
+    return window.navigator.userAgent.indexOf('MSIE ') >= 0 || window.navigator.userAgent.indexOf('Trident/') >= 0;
+}
+
+let cachedWidth: number | undefined = undefined;
+$(window).on("resize", function() {
+	cachedWidth = document.documentElement.clientWidth; //reading this width is SLOWWWW.
+});
+
 /** Converts from vw (hundredths of viewport width) to pixels */
 function vw(vw: number) {
-	return Math.round(vw * document.documentElement.clientWidth / 100);
+	if (cachedWidth === undefined) {
+		cachedWidth = document.documentElement.clientWidth;
+	}
+	return Math.round(vw * cachedWidth / 100);
 }
 
 /** Converts from em to pixels, relative to the font size of the element `relativeTo`, or `document.body` if no element is given. */
 function em(em: number, relativeTo = document.body) {
-	return parseFloat(getComputedStyle(relativeTo).fontSize) * em;
+	return Math.round(parseFloat(getComputedStyle(relativeTo).fontSize) * em);
 }
 
 function nudgeFloat(input: number) {
@@ -37,23 +49,35 @@ function nudgeFloat(input: number) {
  * Sounds are preloaded at initialization.
  * I don't have the slightest idea why, but you need to delete all instances of "export" in howler/index.d.ts for this to compile... :(
  */
+
 class Sound {
+	private name: string;
 	private value: Howl;
 	private static howls = Object.create(null);
+	private static playCallbacks = Object.create(null);
 
 	private constructor(name: string, loop = false, rate = 1) {
+		this.name = name;
 		if (Sound.howls[name] === undefined) {
 			Sound.howls[name] = new Howl({
 				src: [`media/sounds/${name}.mp3`],
 				loop: loop,
 				preload: true,
-				rate: rate
+				rate: rate,
+				onplay: function() {
+					const callback = Sound.playCallbacks[name];
+					if (callback !== undefined) {
+						callback();
+						Sound.playCallbacks[name] = undefined;
+					}
+				}
 			});
 		}
 		this.value = Sound.howls[name];
 	}
 
-	play() {
+	play(onPlay: () => void = function() {}) {
+		Sound.playCallbacks[this.name] = onPlay;
 		this.value.play();
 	}
 
@@ -61,7 +85,14 @@ class Sound {
 		this.value.stop();
 	}
 
-	static get metronome() { return new Sound("metronome"); }
+	get seek() {
+		return this.value.seek() as number;
+	}
+
+	static get usingWebAudio() { return Howler.usingWebAudio; }
+
+	static get clap() { return new Sound("metronome"); }
+	static get beat() { return new Sound("beat"); }
 
 	static number(number: number) {
 		assert(number < 11);
@@ -75,11 +106,13 @@ class Sound {
 
 	static get fanfare() { return new Sound("fanfare"); }
 	static get success() { return new Sound("success"); }
+	static get correct() { return new Sound("correct"); }
+	static get wrong() { return new Sound("wrong"); }
 
 	/**
 	 * Creates and returns a backing loop appropriate for the given time signature and tempo.
 	 * 
-	 * This is not a pure function; save your backing loop instance if you need to stop it later.
+	 * May return different instances for the same input; save your backing loop instance if you need to stop it later.
 	 */
 	static backingLoop(timeSignature: TimeSignature, tempo: Tempo, index?: number): Sound {
 		function indexTo(upperBound: number) {
@@ -94,9 +127,9 @@ class Sound {
 		if (timeSignature.isCompound) {
 			switch(timeSignature.top) {
 				case 2: case 4:
-					return new Sound(`loops/compoundQuadruple/${indexTo(0)}`, true, rate);
+					return new Sound(`loops/compoundQuadruple/${indexTo(6)}`, true, rate);
 				case 3:
-					return new Sound(`loops/compoundTriple/${indexTo(0)}`, true, rate);
+					return new Sound(`loops/compoundTriple/${indexTo(1)}`, true, rate);
 			}
 		} else {
 			switch(timeSignature.top) {
@@ -110,7 +143,7 @@ class Sound {
 	}
 }
 
-type Tempo = 40 | 60 | 80 | 100 | 120;
+type Tempo = 46 | 52 | 60 | 80 | 92 | 100 | 120;
 
 /**
  * An event (like a note or beat), whose timing is specified in absolute beats from the start of a piece
@@ -185,12 +218,17 @@ class MusicEvent {
 		this.performanceAttempts = [];
 	}
 
-	accuracy(tempo: Tempo) {
+	/**
+	 * Returns the accuracy (from 0-1) of the best performance attempt at the given tempo.
+	 * @param tempo The tempo at which to grade the performance attempt
+	 * @param offset A beat offset to shift the performance attempt by before grading it; defaults to 0
+	 */
+	accuracy(tempo: Tempo, offset: number = 0) {
 		assert(tempo > 0);
 
 		if (this.shouldPerform) {
 			if (this.bestPerformanceAttempt === undefined) { return 0; }
-			return Math.max(1 - (Math.abs(this.bestPerformanceAttempt * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0);
+			return Math.max(1 - (Math.abs((this.bestPerformanceAttempt + offset) * Player.beatLength(tempo)) / MusicEvent.timingThreshold), 0);
 		} else {
 			if (this.bestPerformanceAttempt === undefined) { return 1; }
 			else return 0;
@@ -208,7 +246,8 @@ class MusicEvent {
 		return result;
 	}
 
-	static readonly timingThreshold = 150; //ms
+	/** How far away two timings can be before they're graded as different */
+	static readonly timingThreshold = 200; //ms
 }
 
 /**
@@ -298,20 +337,38 @@ class EventList {
 		}
 	}
 
-	gradingInfo(tempo: Tempo) {
+	private get gradedEvents() {
+		return this.ignoreLastEvent ? this.value.slice(0,-1) : this.value;
+	}
+
+	get averageOffset() {
+		const bestAttempts = this.gradedEvents.map(x => x.bestPerformanceAttempt).filter(x => x !== undefined) as Array<number>;
+		if (bestAttempts.length === 0) { return 0; }
+		return bestAttempts.reduce((a,b) => a + b, 0) / bestAttempts.length;
+	}
+
+	/**
+	 * Returns grading info about the quality of performances of these events, at a specific tempo. 
+	 * @param tempo The tempo at which to evaluate these performances
+	 * @param offset An offset to apply to all performances before grading; defaults to 0
+	 */
+	gradingInfo(tempo: Tempo, offset: number = 0) {
 		assert(tempo > 0);
 
-		if (this.ignoreLastEvent) {
-			this.value[this.value.length-1].removeAllPerformanceAttempts();
-			this.value[this.value.length-1].addPerformanceAttempt(0);
-		}
-
-		const successes = this.value.filter(x => x.accuracy(tempo) > 0);
-		const extraAttempts = this.value.reduce((a,b) => a + b.extraPerformanceAttempts.length, 0);
-		const accuracy = successes.length / (this.value.length + extraAttempts);
-		const timingAverage = this.value.reduce((a,b) => a + b.accuracy(tempo), 0) / this.value.length;
+		const successes = this.gradedEvents.filter(x => x.accuracy(tempo, offset) > 0);
+		const extraAttempts = this.gradedEvents.reduce((a,b) => a + b.extraPerformanceAttempts.length, 0);
+		const accuracy = successes.length / (this.gradedEvents.length + extraAttempts);
+		const timingRating = this.value.reduce((a,b) => a + b.accuracy(tempo, offset), 0) / this.gradedEvents.length;
 		
-		return {accuracy: accuracy, timing: timingAverage};
+		return {accuracy: accuracy, timingRating: timingRating, averageOffset: this.averageOffset};
+	}
+
+	mightHaveLatencyIssues(tempo: Tempo) {
+		const apparentAccuracy = this.gradingInfo(tempo, 0).accuracy;
+		if (apparentAccuracy > 0.8) { return false; }
+		if (this.averageOffset < 0) { return false; }
+		const correctedAccuracy = this.gradingInfo(tempo, -this.averageOffset).accuracy;
+		return (correctedAccuracy > 0.65 && correctedAccuracy - apparentAccuracy > 0.25);
 	}
 }
 
@@ -330,11 +387,11 @@ class NoteType {
 
 	get description(): string {
 		switch (this.rawValue) {
-			case 1: return "whole note";
-			case 2: return "half note";
-			case 4: return "quarter note";
-			case 8: return "eighth note";
-			case 16: return "sixteenth note";
+			case 1: return "whole";
+			case 2: return "half";
+			case 4: return "quarter";
+			case 8: return "eighth";
+			case 16: return "sixteenth";
 		}
 	}
 
@@ -348,48 +405,89 @@ class NoteType {
 		}
 	}
 
+	get stemmed() {
+		return this.rawValue > 1;
+	}
+
 	get absoluteLength() {
 		return 1/this.rawValue;
 	}
 
-	get unbeamedCharacter(): string {
-		switch (this.rawValue) {
-			case 1: return "w";
-			case 2: return "h";
-			case 4: return "q";
-			case 8: return "e";
-			case 16: return "s";
+	static readonly dotCharacter = "\ue1fc&nbsp;";
+
+	static dots(count: number) {
+		assert(count >= 0);
+		let result = "";
+		for (let i = 0; i < count; i++) {
+			result += NoteType.dotCharacter;
+		}
+		return result;
+	}
+
+	static readonly unbeamedSpacer = "&nbsp;";
+
+	static spacer(beams: NoteTypeBeams): string {
+		switch (beams) {
+			case 0: return "&nbsp;&nbsp;";
+			case 1: return "\ue1f8";
+			case 2: return "\ue1fa";
 		}
 	}
 
-	static beamedCharacter(beamsIn: NoteTypeBeams, beamsOut: NoteTypeBeams): string {
+	unbeamedCharacter(dots: 0 | 1 | 2, spaced = true): string {
+		let result: string;
+		switch (this.rawValue) {
+			case 1: result = "\ue1d2"; break;
+			case 2: result = "\ue1d3"; break;
+			case 4: result = "\ue1d5"; break;
+			case 8: result = "\ue1d7"; break;
+			case 16: result = "\ue1d9"; break;
+		}
+		if (spaced || dots > 0) {
+			result += NoteType.unbeamedSpacer + NoteType.dots(dots);
+		}
+		return result + (spaced ? NoteType.unbeamedSpacer : "");
+	}
+
+	static beamedCharacter(beamsIn: NoteTypeBeams, beamsOut: NoteTypeBeams, dots: 0 | 1 | 2): string {
+		let result = "";
+
 		switch (beamsIn) {
-			case 0: switch (beamsOut) {
-				case 1: return "r";
-				case 2: return "d";
-				default: assertionFailure(); //beamsIn: 0, beamsOut:0 does not produce a beamed character at all
-			}
-			case 1: switch (beamsOut) {
-				case 0: return "y";
-				case 1: return "t";
-				case 2: return "d";
-			}
-			case 2: switch (beamsOut) {
-				case 0: return "g";
-				case 1: return "g";
-				case 2: return "f";
-			}
+			case 0: result += "\ue1f1"; break;
+			case 1: result += "\ue1f3"; break;
+			case 2: result += "\ue1f5"; break;
+			default: assertionFailure();
 		}
+
+		switch (beamsOut) {
+			case 0: result += ""; break;
+			case 1: result += "\ue1f8"; break;
+			case 2: result += "\ue1fa"; break;
+			default: assertionFailure();
+		}
+
+		result += NoteType.dots(dots);
+
+		if (beamsOut == 0) {
+			result += NoteType.unbeamedSpacer + NoteType.unbeamedSpacer; //dots combine correctly with beam-finishing note characters so we do both spacers afterwards instead of on either side like with true unbeamed notes
+		}
+
+		return result;
 	}
 
-	get restCharacter(): string {
+	restCharacter(dots: 0 | 1 | 2, spaced = true): string {
+		let result: string;
 		switch (this.rawValue) {
-			case 1: return "W";
-			case 2: return "H";
-			case 4: return "Q";
-			case 8: return "E";
-			case 16: return "S";
+			case 1: result = "&nbsp;\ue4f4"; break;
+			case 2: result = "&nbsp;\ue4f5"; break;
+			case 4: result = "\ue4e5"; break;
+			case 8: result = "\ue4e6"; break;
+			case 16: result = "\ue4e7"; break;
 		}
+		if (spaced || dots > 0) {
+			result += NoteType.unbeamedSpacer + NoteType.dots(dots);
+		}
+		return result + (spaced ? NoteType.unbeamedSpacer : "");
 	}
 }
 
@@ -406,7 +504,7 @@ class Note {
 	//** A sound this note makes; empty string for silence */
 	sound?: Sound;
 
-	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = Sound.metronome) {
+	constructor(type: NoteType, dots: 0 | 1 | 2 = 0, customPrefix = "", customSuffix = "", sound = Sound.clap) {
 		assert(dots >= 0 && dots <= 2);
 		
 		this.type = type;
@@ -440,16 +538,33 @@ class Note {
 	}
 
 	get description() {
-		return this.dotsDescription + this.type.description;
+		return this.dotsDescription + this.type.description + " note";
 	}
 
 	toString() {
 		return this.description;
 	}
 
-	notation(beamsIn: NoteTypeBeams = 0, beamsOut: NoteTypeBeams = 0) {
-		const result = (beamsIn == 0 && beamsOut == 0) ? this.type.unbeamedCharacter : NoteType.beamedCharacter(beamsIn, beamsOut);
-		return this.customPrefix + result + Note.dots(this.dots) + this.customSuffix;
+	get lowercaseIndefiniteDescription() {
+		return `${this.description[0] === "e" ? "an" : "a"} ${this.description}`;
+	}
+
+	get capitalizedIndefiniteDescription() {
+		return `${this.description[0] === "e" ? "An" : "A"} ${this.description}`;
+	}
+
+	notation(beamsIn: NoteTypeBeams = 0, beamsOut: NoteTypeBeams = 0, spaced = true) {
+		const result = (beamsIn == 0 && beamsOut == 0) ? this.type.unbeamedCharacter(this.dots, spaced) : NoteType.beamedCharacter(beamsIn, beamsOut, this.dots);
+		return this.customPrefix + result + this.customSuffix;
+	}
+
+	get inlineNotation() {
+		const style = this.stemmed ? ` style="top: 0.4em;"` : ``;
+		return `<span class="inline-notation"${style}>${this.notation(0, 0, false)}</span>`;
+	}
+
+	get stemmed(): boolean {
+		return !(this instanceof Rest) && this.type.stemmed;
 	}
 
 	get absoluteLength(): number {
@@ -462,6 +577,36 @@ class Note {
 
 	relativeLength(other: Note) {
 		return this.absoluteLength / other.absoluteLength;
+	}
+
+	readableLength(timeSignature: TimeSignature) {
+		const wholeComponent = Math.floor(this.relativeLength(timeSignature.bottom));
+		const fractionalComponent = this.relativeLength(timeSignature.bottom) - wholeComponent;
+
+		const wholeDescription = wholeComponent === 0 ? "" : wholeComponent.toString();
+		let fractionalDescription = "";
+
+		const epsilon = 0.0001;
+		const phrases = [
+			[0, ``],
+			[1/4, `&frac14;`],
+			[1/2, `&frac12;`],
+			[3/4, `&frac34;`],
+			[1/6, `&frac16;`],
+			[1/3, `&frac13;`],
+			[2/3, `&frac23;`],
+			[5/6, `&frac56;`]
+		];
+		for (let pair of phrases) {
+			const value = pair[0] as number;
+			const phrase = pair[1] as string;
+
+			if (Math.abs(value - fractionalComponent) < epsilon) {
+				fractionalDescription = phrase;
+			}
+		}
+
+		return wholeDescription + fractionalDescription + " beat" + (this.relativeLength(timeSignature.bottom) > 1 ? "s" : "");
 	}
 
 	get undotted() {
@@ -488,17 +633,6 @@ class Note {
 	get normalized() {
 		return new this.Self(this.type, this.dots);
 	}
-
-	static readonly dotCharacter = ".";
-
-	static dots(count: number) {
-		assert(count >= 0);
-		let result = "";
-		for (let i = 0; i < count; i++) {
-			result += Note.dotCharacter;
-		}
-		return result;
-	}
 };
 
 /**
@@ -510,10 +644,14 @@ class Rest extends Note {
 		if (sound === undefined) { this.sound = undefined; }
 	}
 
-	notation(beamsIn: 0 | 1 | 2 = 0, beamsOut: 0 | 1 | 2 = 0) {
+	get description() {
+		return this.dotsDescription + this.type.description + " rest";
+	}
+
+	notation(beamsIn: 0 | 1 | 2 = 0, beamsOut: 0 | 1 | 2 = 0, spaced = true) {
 		beamsIn; beamsOut;
-		const result = this.type.restCharacter;
-		return this.customPrefix + result + Note.dots(this.dots) + this.customSuffix;
+		const result = this.type.restCharacter(this.dots, spaced);
+		return this.customPrefix + result + this.customSuffix;
 	}
 }
 
@@ -544,6 +682,10 @@ class Count {
 
 	toString() { return this.rawValue; }
 
+	get description() {
+		return this.toString();
+	}
+
 	get timing(): number {
 		switch (this.rawValue) {
 			case "beat": return 0;
@@ -570,6 +712,10 @@ class Count {
 			case "ma": return "2/3 of the way through";
 			case "mi": return "5/6 of the way through";
 		}
+	}
+
+	get capitalizedTimingString(): string {
+		return this.timingString.charAt(0).toUpperCase() + this.timingString.slice(1);
 	}
 
 	isEqual(other: Count) {
@@ -617,7 +763,7 @@ class TimingDescription {
 	}
 
 	/** Creates a timing description of the given absolute `timing` in the given `timeSignature` */
-	static of(timing: number, timeSignature: TimeSignature, tempo: Tempo) {
+	static of(timing: number, timeSignature: TimeSignature, tempo: Tempo = 80) {
 		assert(tempo > 0);
 
 		let beat = Math.floor(timing);
@@ -683,7 +829,7 @@ class TimingDescription {
 	static knownCounts = Count.all;
 }
 
-type TimeSignatureTop = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12;
+type TimeSignatureTop = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
 
 /**
  * An Orff time signature, consisting of a number of beats per measure (top) and a type of note that receives 1 beat (bottom).
@@ -758,39 +904,34 @@ class TimeSignature {
 
 	get notation() {
 		const numerator = this.bottom.dots === 0 ? this.top : this.top * 3;
-		assert(numerator <= 12);
+		assert(numerator <= 16);
 		const denominator = this.bottom.dots === 0 ? this.bottom.type.rawValue : this.bottom.type.rawValue * 2;
 		assert(denominator <= 16);
-		return TimeSignature.prefix + TimeSignature.topCharacter(numerator as TimeSignatureTop) + TimeSignature.bottomCharacter(denominator as NoteTypeName) + TimeSignature.suffix;
+		return `<span class="timeSignature-top">${TimeSignature.topNotation(numerator as TimeSignatureTop)}</span><span class="timeSignature-bottom">${TimeSignature.bottomNotation(denominator as NoteTypeName)}</span>`;
 	}
 
-	static readonly prefix = '<span class="timeSignature">';
-	static readonly suffix = '</span>';
-
-	static topCharacter(digit: TimeSignatureTop) {
-		switch (digit) {
-			case 1: return "!";
-			case 2: return "@";
-			case 3: return "#";
-			case 4: return "$";
-			case 5: return "%";
-			case 6: return "^";
-			case 7: return "&";
-			case 8: return "*";
-			case 9: return "(";
-			case 10: return ")";
-			case 12: return "~";
-		}
+	get inlineNotation() {
+		return `<span class="inline-notation" style="margin-left: -0.2em; margin-right: -0.3em;">${this.notation}</span>`;
 	}
 
-	static bottomCharacter(digit: NoteTypeName) {
-		switch (digit) {
-			case 1: return "1";
-			case 2: return "2";
-			case 4: return "4";
-			case 8: return "8";
-			case 16: return "6";
+	static topNotation(value: TimeSignatureTop) {
+		return this.numericCharacters(value, "\ue09e") + "&nbsp;";
+	}
+
+	static bottomNotation(value: NoteTypeName) {
+		return this.numericCharacters(value, "\ue09f") + "&nbsp;";
+	}
+
+	private static numericCharacters(value: TimeSignatureTop, control: string) {
+		const basis = 0xe080;
+		let result = "";
+		let place = 1;
+		while (place <= value) {
+			const digit = (value % (place*10)) / place;
+			result += control + String.fromCharCode(basis + digit);
+			place *= 10;
 		}
+		return result;
 	}
 }
 
@@ -888,6 +1029,15 @@ class Block {
 	}
 }
 
+interface StaffElementPositionArguments {
+	element: JQuery<HTMLElement>
+	noteIndex: number
+	beatOffset: number
+	verticalOffset: number
+	centerElement: boolean
+	belowNote: boolean
+}
+
 /**
  * A piece of music, consisting of sequential notes in a particular time signature.
  */
@@ -937,18 +1087,18 @@ class Piece {
 
 	/** Returns a reference note to use when considering how far to space out the music. Never returns whole note, though; that's too squished. */
 	get maxNoteType() {
-		let result = 2;
+		let result = 4;
 		for (let note of this.notes) {
 			result = Math.max(result, note.type.rawValue);
 		}
 		return new NoteType(result as NoteTypeName);
 	}
 
-	appropriateSpaces(note: Note) {
+	appropriateSpaces(note: Note, beams: NoteTypeBeams) {
 		let result = "";
 		const relativeLength = note.relativeLength(new Note(this.maxNoteType));
 		for (let i = 0; i < relativeLength-1; i++) {
-			result += "&nbsp;";
+			result += NoteType.spacer(beams);
 		}
 		return result;
 	}
@@ -972,19 +1122,22 @@ class Piece {
 		const clapInfo = this.noteEvents.gradingInfo(tempo);
 		const tapInfo = this.beatEvents.gradingInfo(tempo);
 		const passed = clapInfo.accuracy === 1 && tapInfo.accuracy === 1;
-		const timingAccuracy = (clapInfo.timing + tapInfo.timing) / 2;
+		const timingRating = (clapInfo.timingRating + tapInfo.timingRating) / 2;
 		const averageAccuracy = (clapInfo.accuracy + tapInfo.accuracy) / 2;
+		const averageOffset = (clapInfo.averageOffset + tapInfo.averageOffset) / 2;
 
 		let summary: string;
 
 		if (passed) {
-			if (timingAccuracy > 0.9) {
+			if (timingRating > 0.9) {
 				summary = "Wow! You totally rocked that level; amazing job! See if you can do as well on the next!";
-			} else if (timingAccuracy > 0.5) {
+			} else if (timingRating > 0.5) {
 				summary = "Nice performance! This level's done; onto the next!";
 			} else {
 				summary = "You successfully performed every clap and tap! You can head on to the next level, or stick around and try to improve your timing!";
 			}
+		} else if (this.beatEvents.mightHaveLatencyIssues(tempo)) {
+			summary = `Say... your beat taps are <em>consistently</em> ${Math.round(this.beatEvents.averageOffset * Player.beatLength(tempo) / 100) / 10} seconds late. You're not playing on wireless headphones, are you? Try using your device's built-in speakers!`;
 		} else if (tapInfo.accuracy === 0) {
 			summary = "Don't forget that you have to tap to the beat, not just clap the notes! Keep trying!";
 		} else if (clapInfo.accuracy === 1) {
@@ -997,10 +1150,13 @@ class Piece {
 			summary = "Practice is hard; keep working! You don't have to master the whole piece at once&mdash;pick just one measure to review and repeat it over and over yourself before you try again!";
 		}
 
+		summary += "<br/><br/>"
+
 		return {
 			clapAccuracy: clapInfo.accuracy,
 			tapAccuracy: tapInfo.accuracy,
-			timingAccuracy: timingAccuracy,
+			timingRating: timingRating,
+			averageOffset: averageOffset,
 			passed: passed,
 			summary: summary
 		};
@@ -1050,9 +1206,12 @@ class Piece {
 			} else if (previousBeams > note.type.beams && nextBeams > note.type.beams) {
 				beamsIn = note.type.beams;
 				beamsOut = note.type.beams;
+			} else if (nextBeams > previousBeams && nextBeams === note.type.beams) {
+				beamsIn = previousBeams;
+				beamsOut = nextBeams;
 			} else {
 				const minorRhythmFactor = this.timeSignature.bottom.relativeLength(note.undotted.doubled)
-				const willCrossMinorRhythmicBoundary = Math.floor(currentBeat * minorRhythmFactor) != Math.floor((currentBeat + noteLength) * minorRhythmFactor) && (currentBeat + noteLength) * minorRhythmFactor == Math.floor((currentBeat + noteLength) * minorRhythmFactor);
+				const willCrossMinorRhythmicBoundary = Math.floor(currentBeat * minorRhythmFactor) != Math.floor(nudgeFloat((currentBeat + noteLength) * minorRhythmFactor)) && nudgeFloat((currentBeat + noteLength) * minorRhythmFactor) == Math.floor(nudgeFloat((currentBeat + noteLength) * minorRhythmFactor));
 				if (willCrossMinorRhythmicBoundary) {
 					beamsIn = note.type.beams;
 					beamsOut = Math.min(nextBeams, note.type.beams) as 0 | 1 | 2;
@@ -1062,15 +1221,15 @@ class Piece {
 				}
 			}
 			
-			result += `<span class="note" id="${this.idForNoteIndex(i)}" title="">${note.notation(beamsIn, beamsOut)}</span>`;
-			if (beamsIn == 0 && beamsOut == 0) {
-				result += this.appropriateSpaces(note);
-			}
+			const type = note instanceof Rest ? "rest" : "note";
+			result += `<span class="${type}" id="${this.idForNoteIndex(i)}" title="">${note.notation(beamsIn, beamsOut)}`;
+			result += this.appropriateSpaces(note, beamsOut) + `</span>`;
 			
 			currentBeat = nudgeFloat(currentBeat + noteLength);
 			previousBeams = beamsOut;
 		}
-		return result + `<span id="${this.idForNoteIndex(this.notes.length)}">${Piece.finalBarlineCharacter}</span>`;
+
+		return result + `<span id="${this.idForNoteIndex(this.notes.length)}">${Piece.finalBarlineCharacter}</span><span class="ie-padding-hack"></span>`;
 	}
 
 	private metricsForIndices(startIndex: number, endIndex: number) {
@@ -1092,30 +1251,46 @@ class Piece {
 	}
 
 	/**
-	 * Converts a beat offset from a note into a pixel offset from a note HTML element
-	 * @param offset The beat offset to convert
-	 * @param noteIndex The index of the note to offset from
-	 * @param counts Which counts may be used to describe locations in time; necessary to interpret offsets near barlines
-	 * @param tempo The tempo of the piece
+	 * Positions a staff element relative to a note
 	 */
-	private positionOffsetFromNoteIndex(offset: number, noteIndex: number, tempo: Tempo) {
-		assert(noteIndex >= 0);
-		assert(noteIndex < this.notes.length);
+	private position(args: StaffElementPositionArguments) {
+		assert(args.noteIndex >= 0);
+		assert(args.noteIndex < this.notes.length);
 
-		if (offset < 0) {
-			if (noteIndex > 0) {
-				const metrics = this.metricsForIndices(noteIndex, noteIndex - 1);
-				const timingDescription = TimingDescription.of(this.noteEvents.index(noteIndex).timing + offset, this.timeSignature, tempo);
-				const isOnBeat1 = timingDescription.count.rawValue === "beat" && timingDescription.beat === 0;
-				const fraction = (offset - (metrics.crossesBarline && !isOnBeat1 ? 1 : 0)) / metrics.beatLength;
-				return fraction * -metrics.pixelOffset;
+		const noteElement = $("#" + this.idForNoteIndex(args.noteIndex));
+
+		let horizontalOffset: number;
+		if (args.beatOffset < 0) {
+			if (args.noteIndex == 0) {
+				horizontalOffset = 0;
 			} else {
-				return 0;
+				const metrics = this.metricsForIndices(args.noteIndex, args.noteIndex - 1);
+				const timingDescription = TimingDescription.of(this.noteEvents.index(args.noteIndex).timing + args.beatOffset, this.timeSignature);
+				const isOnBeat1 = timingDescription.count.rawValue === "beat" && timingDescription.beat === 0;
+				const fraction = (args.beatOffset - (metrics.crossesBarline && !isOnBeat1 ? 1 : 0)) / metrics.beatLength;
+				horizontalOffset = fraction * -metrics.pixelOffset;
 			}
 		} else {
-			const metrics = this.metricsForIndices(noteIndex, noteIndex + 1);
-			return (offset / metrics.beatLength) * metrics.pixelOffset;
+			const metrics = this.metricsForIndices(args.noteIndex, args.noteIndex + 1);
+			horizontalOffset = (args.beatOffset / metrics.beatLength) * metrics.pixelOffset;
 		}
+
+		horizontalOffset += vw(0.7);
+		if (args.centerElement) {
+			horizontalOffset -= args.element.width()!/2;
+		}
+
+		let verticalOffset = args.verticalOffset;
+		if (args.belowNote) {
+			verticalOffset += noteElement.height()! + vw(2);
+		}
+
+		const goshDarnIE = isInternetExplorer() ? noteElement.parent().scrollLeft()! : 0;
+
+		args.element.offset({
+			left: noteElement.position().left + noteElement.parent().position().left + goshDarnIE + horizontalOffset,
+			top: noteElement.parent().position().top + verticalOffset
+		});
 	}
 
 	static hueForAccuracy(accuracy: number) {
@@ -1174,9 +1349,11 @@ class Piece {
 			noteElement.tooltip("destroy");
 		}
 		
+		const offset = (noteOrRest == "note") ? em(0.3, noteElement[0]) : 0; //undo span-shifting hack from .note CSS
+
 		noteElement.tooltip({
 			content: tooltipContent,
-			position: { my: "center top", at: "center bottom-30", collision: "fit" }
+			position: { my: "center top", at: `center bottom-${offset}`, collision: "fit" }
 		});
 	}
 
@@ -1195,16 +1372,16 @@ class Piece {
 		if (!event.graded) { return; }
 
 		for (let extraClap of event.extraPerformanceAttempts) {
-			const position = this.positionOffsetFromNoteIndex(extraClap, noteIndex, tempo);
 			const extraClapElement = $(`<div class="extraClap ${extraClapClass}" title="">Extra clap<br/>❗️</div>`);
 			noteElement.parent().append(extraClapElement);
-			extraClapElement.position({
-				my: "center top",
-				at: `left+${position} top+${vw(1.5)}`,
-				of: noteElement,
-				collision: "none",
-				within: noteElement.parent()
-			})
+			this.position({
+				element: extraClapElement,
+				noteIndex: noteIndex,
+				beatOffset: extraClap,
+				verticalOffset: 0,
+				centerElement: true,
+				belowNote: false
+			});
 			extraClapElement.tooltip({
 				content: `<div style="color: hsl(0,80%,40%)">You added a clap ${TimingDescription.of(event.timing + extraClap, this.timeSignature, tempo).description(Verbosity.long)}</div>`
 			});
@@ -1232,7 +1409,6 @@ class Piece {
 		const visibleCountings = (shouldShowNoteCount ? [0] : []).concat(noteEvent.offsetsToBeatsForLength(note.relativeLength(this.timeSignature.bottom)));
 		for (let relativeCounting of visibleCountings) {
 			const absoluteCounting = noteEvent.timing + relativeCounting;
-			const position = this.positionOffsetFromNoteIndex(relativeCounting, noteIndex, tempo);
 
 			let noteAccuracy = 1;
 			let beatAccuracy = 1;
@@ -1240,20 +1416,21 @@ class Piece {
 			if (absoluteCounting === Math.floor(absoluteCounting)) {
 				const beatEvent = this.beatEvents.index(absoluteCounting);
 				beatAccuracy = beatEvent.accuracy(tempo);
+
 				if (!beatEvent.graded) { return; }
 
 				//Render extra taps
 				for (let extraTap of beatEvent.extraPerformanceAttempts) {
-					const position = this.positionOffsetFromNoteIndex(extraTap + beatEvent.timing - noteEvent.timing, noteIndex, tempo);
 					const extraTapElement = $(`<div class="extraTap ${extraTapClass}" title="">❗️<br/>Extra tap</div>`);
 					noteElement.parent().append(extraTapElement);
-					extraTapElement.position({
-						my: "center bottom",
-						at: `left+${position} bottom`,
-						of: noteElement,
-						collision: "none",
-						within: noteElement.parent()
-					})
+					this.position({
+						element: extraTapElement,
+						noteIndex: noteIndex,
+						beatOffset: extraTap + beatEvent.timing - noteEvent.timing,
+						verticalOffset: vw(3),
+						centerElement: true,
+						belowNote: true
+					});
 					extraTapElement.tooltip({
 						content: `<div style="color: hsl(0,80%,40%)">You added a tap ${TimingDescription.of(beatEvent.timing + extraTap, this.timeSignature, tempo).description(Verbosity.long)}</div>`
 					});
@@ -1267,14 +1444,16 @@ class Piece {
 
 			const countingElement = $(`<div style="color: hsl(${hue},80%,40%)" class="counting ${countingClass}" title="">&nbsp;${TimingDescription.of(absoluteCounting, this.timeSignature, tempo).description(Verbosity.short)}</div>`);
 			noteElement.parent().append(countingElement);
-			countingElement.position({
-				my: "left bottom",
-				at: `left+${position} bottom-${vw(2.5)}`,
-				of: noteElement,
-				collision: "fit",
-				within: noteElement.parent()
-			})
 
+			this.position({
+				element: countingElement,
+				noteIndex: noteIndex,
+				beatOffset: relativeCounting,
+				verticalOffset: vw(1),
+				centerElement: true,
+				belowNote: true
+			});
+			
 			if (relativeCounting === 0) {
 				const noteElement = $("#" + this.idForNoteIndex(noteIndex));
 				tooltipContent = noteElement.tooltip("option", "content");
@@ -1294,8 +1473,8 @@ class Piece {
 		}
 	}
 
-	static readonly barlineCharacter = "\\ ";
-	static readonly finalBarlineCharacter = "\\|";
+	static readonly barlineCharacter = "&nbsp;\ue030&nbsp;&nbsp;";
+	static readonly finalBarlineCharacter = "&nbsp;\ue032";
 }
 
 /**
@@ -1304,6 +1483,7 @@ class Piece {
 interface Playback {
 	startTime: number;
 	nextNote: number;
+	nextBeat: number;
 	timerID: number;
 	lastClap: number;
 }
@@ -1345,6 +1525,13 @@ class Player {
 
 	private playback?: Playback;
 
+	private audioDelay = 0;
+	private static inputLatency = 30;
+
+	get timingCorrection() {
+		return Player.inputLatency - this.audioDelay;
+	}
+
 	constructor(piece: Piece, tempo: Tempo) {
 		this._piece = piece;
 		this._tempo = tempo;
@@ -1372,13 +1559,27 @@ class Player {
 		this.playback = {
 			startTime: Date.now() + delayUntilStart,
 			nextNote: (countOff ? -this.piece.timeSignature.countoff.notes.length : 0),
+			nextBeat: 0,
 			timerID: NaN, //will replace momentarily
 			lastClap: -Infinity
 		};
 
 		this.playNote();
-		requestAnimationFrame(() => this.update());
 		this.onPlay();
+	}
+
+	private startBackingLoop() {
+		if (!this.isPlaying) { return; }
+		if (this.playback === undefined) { assertionFailure(); }
+		if (!Sound.usingWebAudio) { return; }
+
+		const self = this;
+		this.backingLoop?.play(function() {
+			if (!self.isPlaying) { return; }
+			if (self.playback === undefined) { assertionFailure(); }
+			self.audioDelay = (self.backingLoop.seek * 1000) - (Date.now() - self.playback.startTime);
+			console.log(`Calculated audio delay: ${self.audioDelay}ms`);
+		});
 	}
 
 	/**
@@ -1413,7 +1614,7 @@ class Player {
 		if (this.isCountingOff || !this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
 
-		const clapTime = (Date.now() - Player.synchronizationHack - this.playback.startTime);
+		const clapTime = (Date.now() - this.timingCorrection - this.playback.startTime);
 		const debounceTime = 100;
 		if (clapTime - this.playback.lastClap <= debounceTime) { return; }
 		this.playback.lastClap = clapTime;
@@ -1429,7 +1630,7 @@ class Player {
 		if (this.isCountingOff || !this.isPlaying) { return; }
 		if (this.playback === undefined) { assertionFailure(); }
 
-		const tapTime = (Date.now() - Player.synchronizationHack - this.playback.startTime) / Player.beatLength(this.tempo);
+		const tapTime = (Date.now() - this.timingCorrection - this.playback.startTime) / Player.beatLength(this.tempo);
 		const affectedIndices = this.piece.beatEvents.gradePerformanceAttempt(tapTime);
 		for (let i of affectedIndices) {
 			const noteIndex = this.piece.noteEvents.lastIndexBefore(this.piece.beatEvents.index(i).timing);
@@ -1437,25 +1638,71 @@ class Player {
 		}
 	}
 
-	private update() {
-		if (!this.isPlaying) { return; }
+	/** Schedules playback of the next beat or note after the giving timing. Returns the time of the next note, even if it comes after the beat. */
+	private scheduleNextPlay(beat: boolean) {
 		if (this.playback === undefined) { assertionFailure(); }
 
-		this.piece.beatEvents.enableGradingThrough((Date.now() - this.playback.startTime) / Player.beatLength(this.tempo));
+		let nextNoteTime: number;
+		let nextBeatTime: number | undefined = undefined;
+		if (this.isCountingOff) {
+			const countoffIndex = this.playback.nextNote + this.piece.timeSignature.countoff.notes.length;
+			const remainingCountoff = this.piece.timeSignature.countoff.notes.slice(countoffIndex);
+			const remainingTime = this.piece.timeSignature.milliseconds(remainingCountoff, this.tempo);
+			nextNoteTime = this.playback.startTime - remainingTime;
+		} else {
+			const isAtEnd = this.playback.nextNote == this.piece.notes.length;
+			const nextNoteTiming = isAtEnd ? this.piece.end : this.piece.noteEvents.index(this.playback.nextNote).timing;
+			nextNoteTime = this.playback.startTime + (nextNoteTiming * Player.beatLength(this.tempo));
+
+			if (this.playback.nextNote > 0) {
+				const currentTiming = beat ? this.playback.nextBeat-1 : this.piece.noteEvents.index(this.playback.nextNote-1).timing;
+				const nextBeat = Math.ceil(currentTiming+0.01);
+				if (nextNoteTiming > nextBeat) { nextBeatTime = this.playback.startTime + (nextBeat * Player.beatLength(this.tempo)); }
+			}
+		}
+
+		var self = this;
+		if (nextBeatTime !== undefined) {
+			console.log(`Scheduled beat!`);
+			this.playback.timerID = window.setTimeout(function() { self.playBeat(); }, nextBeatTime - Date.now());
+		} else {
+			console.log(`Scheduled note!`);
+			this.playback.timerID = window.setTimeout(function() { self.playNote(); }, nextNoteTime - Date.now());
+		}
+
+		return nextNoteTime;
+	}
+
+	private playBeat() {
+		if (this.piece === undefined) { return; }
+		if (this.playback === undefined) { return; }
+		if (!this.isPlaying) { return; }
+
+		this.handleBeat();
+		
+		this.scheduleNextPlay(true);
+	}
+
+	private handleBeat() {
+		if (this.piece === undefined) { return; }
+		if (this.playback === undefined) { return; }
+		if (!this.isPlaying) { return; }
+		
+		if (!Sound.usingWebAudio) {
+			Sound.beat.play();
+		}
+
+		this.piece.beatEvents.enableGradingThrough(this.playback.nextBeat);
 		if (this.playback.nextNote > 0 && this.playback.nextNote <= this.piece.notes.length) {
 			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1, this.tempo);
 		}
 
-		requestAnimationFrame(() => this.update());
+		this.playback.nextBeat += 1;
 	}
 
 	private playNote() {
 		if (this.piece === undefined) { return; }
 		if (this.playback === undefined) { return; }
-
-		if (this.playback.nextNote === 0) {
-			this.backingLoop?.play();
-		}
 
 		if (this.playback.nextNote >= this.piece.notes.length) {
 			this.piece.beatEvents.enableGradingThrough(this.piece.end);
@@ -1465,34 +1712,30 @@ class Player {
 		}
 		if (!this.isPlaying) { return; }
 		
-		const currentNote = this.isCountingOff ? this.piece.timeSignature.countoff.notes[this.playback.nextNote + this.piece.timeSignature.countoff.notes.length] : this.piece.notes[this.playback.nextNote];
+		if (this.playback.nextNote === 0) {
+			this.startBackingLoop();
+		}
 		
+		const currentNote = this.isCountingOff ? this.piece.timeSignature.countoff.notes[this.playback.nextNote + this.piece.timeSignature.countoff.notes.length] : this.piece.notes[this.playback.nextNote];
 		currentNote.sound?.play();
 		
 		let noteElement = undefined;
 		if (!this.isCountingOff) {
+			const timing = this.piece.noteEvents.index(this.playback.nextNote).timing;
+			if (timing >= this.playback.nextBeat) { this.handleBeat(); }
+
 			noteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
 			this.piece.noteEvents.index(this.playback.nextNote).graded = true;
 			if (this.playback.nextNote > 0) {
-				this.piece.beatEvents.enableGradingThrough(this.piece.noteEvents.index(this.playback.nextNote).timing)
 				this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote - 1, this.tempo);
 			}
 			this.piece.updateAppearanceOfNoteAtIndex(this.playback.nextNote, this.tempo);
 		}
 		
 		this.playback.nextNote += 1;
-		let nextNoteTime: number;
-		if (this.isCountingOff) {
-			const countoffIndex = this.playback.nextNote + this.piece.timeSignature.countoff.notes.length;
-			const remainingCountoff = this.piece.timeSignature.countoff.notes.slice(countoffIndex);
-			const remainingTime = this.piece.timeSignature.milliseconds(remainingCountoff, this.tempo);
-			nextNoteTime = this.playback.startTime - remainingTime;
-		} else if (this.playback.nextNote == this.piece.notes.length) {
-			nextNoteTime = this.playback.startTime + (this.piece.end * Player.beatLength(this.tempo));
-		} else {
-			nextNoteTime = this.playback.startTime + (this.piece.noteEvents.index(this.playback.nextNote).timing * Player.beatLength(this.tempo));
-		}
 		
+		const nextNoteTime = this.scheduleNextPlay(false);
+
 		if (noteElement && this.playback.nextNote > 0 && this.playback.nextNote < this.piece.notes.length) {
 			const nextNoteElement = $("#" + this.piece.idForNoteIndex(this.playback.nextNote));
 			const scrollMargin = vw(20);
@@ -1504,15 +1747,10 @@ class Player {
 			}
 			noteElement.parent().animate({ scrollLeft: newScrollPosition - scrollMargin }, nextNoteTime - Date.now(), "linear");
 		}
-		
-		var self = this;
-		this.playback.timerID = window.setTimeout(function() { self.playNote(); }, nextNoteTime - Date.now());
 	}
 
 	static beatLength(tempo: Tempo) {
 		assert(tempo > 0);
 		return 1000 * 60/tempo;
 	};
-
-	static synchronizationHack = 20; //ms
 }

@@ -7,23 +7,11 @@ player.onPlay = function() { play(); }
 player.onStop = function() { stop(); }
 player.onComplete = function() { showGradeSummary(); }
 
-function isMobile() {
-    return navigator.userAgent.match(/Mobi/);
-}
+const onboarding = Skill.current!.id == "welcome";
+const firstLevel = onboarding && PieceLevel.current.index == 0;
+const tapsOnly = onboarding && PieceLevel.current.index < 2;
 
-interface JQuery<TElement = HTMLElement> {
-    /**
-     * Calls `handler` on `mousedown` *or* `touchstart`, but not both. Handy for timing-sensitive buttons whose actions should be triggered immediately and exactly once.
-     * @param handler The action to peform when the button is pushed in.
-     */
-    onButtonPush(handler: (event: Event) => void): void;
-}
-
-jQuery.fn.extend({
-    onButtonPush: function(handler: (event: Event) => void) {
-        $(this).on("mousedown", handler).on("touchstart", function(e: Event) { e.preventDefault(); handler(e); });
-    }
-});
+const playButtonIcon = Level.current instanceof RandomLevel ? "ui-icon-shuffle" : "ui-icon-play";
 
 interface DialogButton {
     text: string;
@@ -51,24 +39,61 @@ function showGradeSummary(gradingInfo = player.piece.gradingInfo(player.tempo)) 
         return result;
     }
 
+    function col(start: number, end: number = start+1) {
+        if (isInternetExplorer()) {
+            return `-ms-grid-column: ${start}; -ms-grid-column-span: ${end-start};`;
+        } else {
+            return `grid-column: ${start}/${end};`;
+        }
+    }
+
+    function row(start: number, end: number = start+1) {
+        if (isInternetExplorer()) {
+            return `-ms-grid-row: ${start}; -ms-grid-row-span: ${end-start};`;
+        } else {
+            return `grid-row: ${start}/${end};`;
+        }
+    }
+
+    function formatTendency(offset: number): string {
+        const roundedOffset = Math.round(offset * 100) / 100;
+        let formattedOffset = `${Math.abs(roundedOffset)}`;
+        if (Math.abs(roundedOffset) < 1) {
+            formattedOffset = formattedOffset.substring(1);
+        }
+
+        const singular = Math.abs(roundedOffset) == 1;
+
+        if (roundedOffset == 0) {
+            return `
+                <dd class="tendency-perfect" style="${col(4,6)} ${row(3)}">Correct!</dd>
+            `;
+        } else {
+            return `
+                <dd class="tendency-value" style="${col(4)} ${row(3)}">${formattedOffset}</dd>
+                <dd class="tendency-text" style="${col(5)} ${row(3)}">beat${singular ? "" : "s"}<br/>${roundedOffset > 0 ? "late" : "early"}</dd>
+            `;
+        }
+    }
+
     function formatSummary(summary: string, passed: boolean) {
         const hue = Piece.hueForAccuracy(passed ? 1 : 0);
         const icon = passed ? "check" : "cancel";
         return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
     }
 
-    const summaryElement = `
-        <div id="gradeSummary" title="Your Performance">
-            <dl style="display: grid">
-                <dt style="grid-column: 1/2; grid-row: 2/3;">👏 Successful Claps</dt>
-                    <dd style="grid-column: 1/2; grid-row: 1/2;">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
-                <dt style="grid-column: 3/4; grid-row: 2/3;">🦶 Successful Taps</dt>
-                    <dd style="grid-column: 3/4; grid-row: 1/2;">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
-                <dt style="grid-column: 1/4; grid-row: 4/5;">⏱ Timing Accuracy</dt>
-                    <dd style="grid-column: 1/4; grid-row: 3/4">${formatStars(gradingInfo.timingAccuracy)}</dd>
-            </dl>
-            ${formatSummary(gradingInfo.summary, gradingInfo.passed)}
-        </div>
+    const content = `
+        <dl style="-ms-grid-columns: 1fr 1fr 1fr 1fr 1fr">
+            <dt style="${col(1,3)} ${row(2)}">👏 Successful Claps</dt>
+                <dd style="${col(1,3)} ${row(1)}">${formatAccuracy(gradingInfo.clapAccuracy)}</dd>
+            <dt style="${col(4,6)} ${row(2)}">🦶 Successful Taps</dt>
+                <dd style="${col(4,6)} ${row(1)}">${formatAccuracy(gradingInfo.tapAccuracy)}</dd>
+            <dt style="${col(1,3)} ${row(4)}">⏱ Timing Accuracy</dt>
+                <dd style="${col(1,3)} ${row(3)}">${formatStars(gradingInfo.timingRating)}</dd>
+            <dt style="${col(4,6)} ${row(4)}">📈 Average Tendency</dt>
+                ${formatTendency(gradingInfo.averageOffset)}
+        </dl>
+        ${formatSummary(gradingInfo.summary, gradingInfo.passed)}
     `;
 
     let buttons: Array<DialogButton> = [{
@@ -79,102 +104,74 @@ function showGradeSummary(gradingInfo = player.piece.gradingInfo(player.tempo)) 
             player.rewind();
         }
     }];
-    if (gradingInfo.passed) {
-        if (Skill.current!.isCompleted) {
-             buttons.push({
-                 text: "Next Skill!",
-                 icon: "ui-icon-key",
-                 click: PieceLevel.exit,
-                 class: "nextSkillButton"
-             })
-        } else {
-            buttons.push({
-                text: "Next Level!",
-                icon: "ui-icon-star",
-                click: PieceLevel.goToNext
-            });
-        }
-    } else {
-        buttons.push({
-            text: "Try Again",
-            icon: "ui-icon-refresh",
-            click: function() {
-                $(this).dialog("close");
-                player.play();
-            }
-        });
-    }
 
-    $(summaryElement).dialog({
-        modal: true,
-        width: Math.min(vw(80), em(50)),
-        buttons: buttons,
-        show: {
-            effect: "scale",
-            duration: 400
-        },
-        hide: {
-            effect: "fade",
-            duration: 600
-        },
-        beforeClose: function() { //Levels are never taller than the window, so if we're scrolled down, it's because of this dialog
-            $('html, body').animate({ scrollTop: 0 }, 600);
-        }
-    });
-
-    if (gradingInfo.passed) { Sound.fanfare.play(); }
+    Level.showGradeSummary(content, gradingInfo.passed, buttons, () => play());
 }
 
 $(document).ready(function() {
     PieceLevel.initializePage();
 
     //preload sounds
-    Sound.metronome;
+    Sound.clap;
+    Sound.beat;
     Sound.fanfare;
     player.piece.timeSignature.countoff;
 
     $("#play").button({
         label: "<strong>Play</strong>",
-        icons: { primary: "ui-icon-play" }
+        icons: { primary: playButtonIcon }
     }).onButtonPush(togglePlayback);
 
+    let clapKey = "";
+    if (!isMobile()) {
+        if (isMac()) {
+            clapKey = "<br/>(return)"
+        } else {
+            clapKey = "<br/>(enter)"
+        }
+    }
     $("#clap").button({
-        label: "<strong>Clap</strong>" + (isMobile() ? "" : "<br/>(spacebar)"),
+        label: "<strong>Clap</strong>" + clapKey,
         disabled: true
     }).onButtonPush(clap);
     
     $("#tap").button({
-        label: "<strong>Tap</strong>" + (isMobile() ? "" : "<br/>(shift)"),
+        label: "<strong>Tap</strong>" + (isMobile() ? "" : "<br/>(spacebar)"),
         disabled: true
     }).onButtonPush(tap);
 
     displayPiece();
+
+    if (firstLevel) {
+        $("#play").addClass("require");
+    }
 });
 
-let spaceIsDown = false;
-let shiftIsDown = false;
+const clapKey = $.ui.keyCode.ENTER;
+const tapKey = $.ui.keyCode.SPACE;
+let clapKeyIsDown = false;
+let tapKeyIsDown = false;
+
 $(document).keydown(function(event) {
     switch (event.which) {
-        case $.ui.keyCode.SPACE:
+        case clapKey:
+            if (!player.isPlaying) { return; }
             event.preventDefault();
-            if (!spaceIsDown) {
-                spaceIsDown = true;
+            if (!clapKeyIsDown) {
+                clapKeyIsDown = true;
                 clap();
-                if (!$("#clap").button("option", "disabled")) {
-                    $("#clap").addClass("ui-state-active", 0);
-                    $("#clap").removeClass("ui-state-active", 100);
-                }
+                $("#clap").addClass("ui-state-active", 0);
+                $("#clap").removeClass("ui-state-active", 100);
             }
             break;
-        case 16: //shift
+        case tapKey:
+            if (!player.isPlaying) { return; }
             event.preventDefault();
-            if (!shiftIsDown) {
-                shiftIsDown = true;
+            if (!tapKeyIsDown) {
+                tapKeyIsDown = true;
                 tap();
-                if (!$("#tap").button("option", "disabled")) {
-                    $("#tap").addClass("ui-state-active", 0);
-                    $("#tap").removeClass("ui-state-active", 100);
-                }
+                $("#tap").addClass("ui-state-active", 0);
+                $("#tap").removeClass("ui-state-active", 100);
             }
             break;
         case $.ui.keyCode.ESCAPE:
@@ -184,11 +181,11 @@ $(document).keydown(function(event) {
             }
             break;
         case $.ui.keyCode.PERIOD: //cheat pass
-            PieceLevel.pass();
             showGradeSummary({
                 clapAccuracy: 1,
                 tapAccuracy: 1,
-                timingAccuracy: 1,
+                timingRating: 1,
+                averageOffset: 0,
                 passed: true,
                 summary: "You cheated!"
             });
@@ -201,11 +198,11 @@ $(document).keydown(function(event) {
 });
 $(document).keyup(function(event) {
     switch (event.which) {
-        case $.ui.keyCode.SPACE:
-            spaceIsDown = false;
+        case clapKey:
+            clapKeyIsDown = false;
             break;
-        case 16: //shift
-            shiftIsDown = false;
+        case tapKey:
+            tapKeyIsDown = false;
             break;
         default:
     }
@@ -217,6 +214,10 @@ function displayPiece() {
         player.piece.updateAppearanceOfNoteAtIndex(i, player.tempo);
     }
 };
+
+$(window).on("resize", function() {
+	displayPiece();
+});
 
 function togglePlayback() {
     if (player.isPlaying) {
@@ -235,12 +236,25 @@ function play() {
         player.play();
     }
     player.piece.removeGrading(player.tempo);
+
     $("#play").button({
         label: "Stop",
         icons: { primary: "ui-icon-stop" }
     });
-    $("#clap").button("option", "disabled", false);
+    $("#play").removeClass("require");
+
     $("#tap").button("option", "disabled", false);
+    if (onboarding) {
+        $("#tap").addClass("introduce");
+    }
+
+    if (!tapsOnly) {
+        $("#clap").button("option", "disabled", false);
+        if (onboarding) {
+            setTimeout(() => $("#clap").addClass("introduce"), 250);
+            
+        }
+    }
 }
 
 function stop() {
@@ -249,14 +263,14 @@ function stop() {
     }
     $("#play").button({
         label: "Play",
-        icons: { primary: "ui-icon-play" }
+        icons: { primary: playButtonIcon }
     });
-    $("#clap").button("option", "disabled", true);
+    
     $("#tap").button("option", "disabled", true);
+    $("#tap").removeClass("introduce");
 
-    if (player.piece.gradingInfo(player.tempo).passed) {
-        PieceLevel.pass();
-    }
+    $("#clap").button("option", "disabled", true);
+    $("#clap").removeClass("introduce");
 }
 
 function clap() {

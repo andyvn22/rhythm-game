@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, viewport-fit=cover"/>
+	<title>Rhythm Game</title>
+	<link rel="stylesheet" href="include/jquery-ui.css"/>
+    <link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
+    <link rel="stylesheet" href="level.css"/>
+</head>
+<body>
+    <style>
+        #container {
+            margin-left: 5vw;
+            margin-right: 5vw;
+
+            font-size: 1.3em;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2em;
+            font-variant: small-caps;
+        }
+
+        #progress {
+            height: 1.2em;
+        }
+
+        #question {
+            margin: 0.6em 0;
+            padding: 1em;
+            background-color: white;
+            border: 1px solid black;
+            border-radius: 0.4em;
+        }
+
+        .tooltip h2 {
+            margin-left: 1em;
+            margin-right: 1em;
+        }
+
+        .tooltip h2.correct {
+            color: rgb(52, 158, 52);
+        }
+
+        .tooltip h2.incorrect {
+            color: rgb(170, 31, 31);
+        }
+
+        .tooltip .ui-button {
+            margin-bottom: 1em;
+        }
+
+        #answers div.correct, #answers div.correct:hover {
+            color: rgb(72, 219, 72);
+            opacity: 0.75;
+        }
+
+        #answers div.incorrect, #answers div.incorrect:hover {
+            color: rgb(255, 73, 73);
+            opacity: 0.75;
+        }
+
+        #answers {
+            touch-action: manipulation;
+        }
+
+        #answers .ui-button {
+            margin: 0.5em;
+        }
+        
+		@media screen and (orientation: portrait) {
+			#answers .ui-button {
+                width: 100%;
+                margin: 0.5em 0;
+			}
+
+			#answers {
+				white-space: pre-line;
+			}
+
+			#answers .ui-button::after {
+				content: "\A";
+			}
+		}
+
+        #gradeSummary dl {
+            display: grid;
+            display: -ms-grid;
+        }
+
+        #gradeSummary dl dt {
+            font-weight: 200;
+            margin-bottom: 2em;
+        }
+
+        #gradeSummary dl dd {
+            margin: 0 0.2em;
+            font-size: 12vmin;
+            font-weight: 600;
+
+            text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
+        }
+    </style>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>
+	<script src="include/jquery-1.12.2.min.js"></script>
+	<script src="include/jquery-ui.min.js"></script>
+	<script src="include/howler.core.js"></script>
+	<script src="music.js"></script>
+	<script src="gameData.js"></script>
+
+    <script src="quiz.js"></script>
+    
+    <div id="container">
+        <h1></h1>
+        <div id="progress"></div>
+        <div id="question"></div>
+        <div id="answers"></div>
+    </div>
+</body>
+</html>

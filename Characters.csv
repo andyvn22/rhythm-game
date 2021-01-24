@@ -1,0 +1,21 @@
+e1fc,augmentation dot
+e1f8,single beam
+e1fa,double beam
+e1d2,whole note
+e1d3,half note
+e1d5,quarter note
+e1d7,unbeamed eighth note
+e1d9,unbeamed sixteenth note
+e1f1,no beam finisher
+e1f3,single beam finisher
+e1f5,double beam finisher
+e4f4,whole rest
+e4f5,half rest
+e4e5,quarter rest
+e4e6,eighth rest
+e4e7,sixteenth rest
+e09e,time signature top positioner
+e09f,time signature bottom positioner
+e080-e089,time signature digits
+e030,barline
+e032,final barline

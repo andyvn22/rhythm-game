@@ -99,10 +99,7 @@ JGSW:
 + Show level icon on intro window
 
 FOR RELEASE:
-- Create the actual skill tree
-    - Reconsider "building up to it" template for most advanced syncopation skill
-    - Add a whole second compound 16th note skill, including dots and multiple splits
-
++ Finish the actual skill tree
 + Fix scrolling easing
 + Do not grade an extra foot tap, accurately timed for beat 1 after the piece ends, as wrong. This should actually be encouraged.
 + Fix beaming of pieces with 3rds in them--dang, that was a nasty hack. You had to round off a bunch of beat calculations to adjust for floating point errors.
@@ -110,46 +107,93 @@ FOR RELEASE:
 + Animation for celebrating when you complete a skill in the tree!
 + What makes world.html super-slow on load from finishing a skill sometimes, and it gets fixed instantly when you reload!? ARGH.
     + Oh. It's the filter: drop-shadow that I applied to my svg elements. Darn.
-- Make your own font, because the Rhythms creator didn't respond to your usage request, and because it's missing 6/8 16th characters.
-    - First, test if Dorico's font is usable as-is.
-    - If not, try to fix Dorico's metrics as a starting point.
-- Add save URLs so students can switch computers, and so that you can use them as your proof of student progress
-- Fix spacing bug: it seems that offscreen objects don't work with your count/clap placement code.
-    - Is this your fault or a limitation of the browser?
-    - Can you use `div`s instead of `span`s for your notes, and if so, can you position relative to them? Does that even help?
-- Allow special nodes to include multiple choice or matching quizzes (for note recognition & beat length in time signatures)
-- Is it possible to find out audio latency and adjust accordingly? If so, great--just do it. Otherwise...
-    - Is it possible to detect wireless headphones? Add a warning if you detect them.
-    - Add a warning at the start of the game about wireless headphones.
-    - Test when scoring if it looks like the player's having latency issues, and warn about wireless headphones then.
-- Test thoroughly:
-    - On iPhone
-    - On Chrome
-    - On Firefox
-    - On Internet Explorer
-    - On Android
++ Switch from Rhythms to Bravura, because the creator of Rhythms didn't respond to your use request, and there are unfixable beaming bugs anyway
+    + Convert notation code to use SMuFL
+    + Adjust note height to compensate for vertical centering (you'd use combining staff positions, but they break horizontal spacing)
+    + Create subset of Bravura Text with transfonter.org (necessary not just for efficiency, but because the real Bravura Text has invalid final section bounds)
+    + Fix counting placement
+    + Fix extra clap and extra tap placement
++ Add a warning at the start of the game about wireless headphones.
++ Check when scoring if it looks like the player's having latency issues, and warn about wireless headphones then.
++ Make an onboarding experience for the first few levels
+    + Disable the 'clap' button for levels 1 and 2.
+    + Flash the 'tap' and 'clap' buttons at appropriate times on the first skill.
++ Add the ability to display inline notation, so that you can include them in your descriptions.
+    + Notes & rests
+    + Time signatures
+    + Comb through the whole darn skill tree looking for places to add these...
++ Add save URLs so students can switch computers, and so that you can use them as your proof of student progress
+    + Add copy interface to profile editor
+    + Create load page
+    + Add % complete info to profiles so you can confidently update profiles
+    + Remove unnecessary info from links
++ Allow special nodes to include multiple choice or matching quizzes (for note recognition & beat length in time signatures)
+    + Make a new level format that displays a new page
+    + Display a little form thing
+    + Make a model class for multiple-choice questions
+    + Pull out shared CSS for level splash
+    + Generalize level pass/fail dialog
+    + Pull out shared CSS for level pass/fail
+    + Add new pass/fail info for this new quiz
+    + Make initializer for note name quizzes
+    + Make initializer for time signature quizzes
+    + Make initializer for note relationship questions
+    + Sprinkle these quizzes into the skill tree
++ Fix spacing bug: it seems that offscreen objects don't work with your count/clap placement code.
+    + Is this your fault or a limitation of the browser? (A: It's a bug in JQueryUI.)
+    + Is this related to the insane way Internet Explorer places counts? Yes. However, IE still needs work once it starts scrolling.
+    + Update counting code
+    + Remove horizontalOffset... and verticalOffset... completely in favor of your new position() method
++ Obfuscate links to prevent cheating
++ Add quizzes about the meanings of counts
+
+TESTING:
+    * On iPhone (Blake)
+    * On slow iPhone (Mercutio)
+    * On Chrome (Mac)
+    * On Chrome (Windows)
+    * On Firefox (Mac)
+    - On Firefox (Windows)
+    * On Internet Explorer
+        + Create fallback bass drum sounds played & timed by YOU (the way you do your claps), because looping background tracks do not work if Howler falls back from WebAudio to HTML5.
+        + Make the correct/incorrect tooltips in the quizzes actually work. (What the heck, IE!?)
+        + Change Tap key command so that Windows doesn't yell about sticky keys
+        + Fix skill tree centering
+        + Fix time signatures (ligature issue?)
+        + Fix count & extra clap placement (it's now correct... until it starts scrolling.)
+        + Fix score summary layout (grid)
+    - On Edge
+    - On Android (what browsers?)
 
 POST-RELEASE:
-- Can you check counts via speech recognition?
-- MOAR LOOPS!!!11
++ Make a "Revive" link to undo player deletion.
 - Randomly select from MANY grading summary messages; students will see them very frequently so they should be varied.
     - Include praise for hard work & suggestion of going back to earlier levels.
 - Improve style and content of grading tooltips; focus on important content
+- Add the ability to include a detailed explanation to a quiz question, and then calculate them for length quizzes, a little like you did for the Twine clone.
+- MOAR LOOPS!!!11
+- Can you check counts via speech recognition?
+- Add timing precision and latency adjustment settings
 + Cancel scrolling of piece immediately when you click "Stop"
-- Give every glyph a special offset so that counts can be PERFECTLY aligned
 - Close tooltips on manual scroll of music in piece.html
 - Create an option to practice a level at a slower tempo
-- Create an option to practice certain measures from a level
-- Improve playback/scrolling performance when extra claps are afoot
+- Improve playback/scrolling performance when extra claps/taps are afoot
 - Create a guided review of mistakes, suggested in the final score summary
+    - Create an option to practice certain measures from a level
 - Rotate every page on a phone at weird times and see what breaks
+- Give every glyph a special offset so that counts can be PERFECTLY aligned
 
 POLISH:
+- Add `Block.weight` to prevent all that nasty duplication you're doing
+- Make `Profile.all` private
 - Why did you have to delete the word "export" from howler/index.d.ts every time it occurs to fix the build?
 - Write tests that check that all your skills are in the skill tree and all your time signatures have backing loops
 - What the heck is the deal with HTML nowadays?
 
 UNICORNS:
-- Ties
+- Swing
 - Triplets
 - Mixed meter
+- Asymmetric meter
+- Ties
+- Beam compound 6/8 in 1/3s if the whole beat contains syncopation anywhere--then add more syncopation to Very Advanced Compound Time
