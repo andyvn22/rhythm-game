@@ -167,6 +167,7 @@ TESTING:
 
 POST-RELEASE:
 + Make a "Revive" link to undo player deletion.
++ Make it much clearer in Welcome how to tap, how to clap, and that you should do both simultaneously
 - Randomly select from MANY grading summary messages; students will see them very frequently so they should be varied.
     - Include praise for hard work & suggestion of going back to earlier levels.
 - Improve style and content of grading tooltips; focus on important content

@@ -17,6 +17,10 @@ function isMac() {
     return navigator.platform.match(/Mac/);
 }
 
+function returnKeyName() {
+    return isMac() ? `return` : `enter`;
+}
+
 interface JQuery<TElement = HTMLElement> {
     /**
      * Calls `handler` on `mousedown` *or* `touchstart`, but not both. Handy for timing-sensitive buttons whose actions should be triggered immediately and exactly once.
@@ -913,6 +917,9 @@ class Skill {
             Skill._all.push(new Skill(newData));
         }
 
+        const tapKeyExplanation = isMobile() ? `` : ` Try using the spacebar on your keyboard to tap.`;
+        const clapExplanation = isMobile() ? `Use one hand for the &quot;tap&quot; button and the other for the &quot;clap&quot; button.` : `Use the spacebar to tap and the &quot;${returnKeyName()}&quot; key to clap.`;
+
         const w = Note.whole;
         const dw = Note.whole.dotted;
         const W = Rest.whole;
@@ -939,7 +946,7 @@ class Skill {
             levels: [
                 new ComposedLevel({
                     name: "First Steps",
-                    description: "Just <strong>tap</strong> on every beat&mdash;no claps in here. Should be easy enough, right? Tap, tap, tap, tap...<br/><br/>Oh, there is <em>one</em> catch&mdash;wireless headphones make it impossible.",
+                    description: "Just hit that &quot;<strong>tap</strong>&quot; button on every beat. Should be easy enough, right? Tap, tap, tap, tap...<br/><br/>Oh, there is <em>one</em> catch&mdash;wireless headphones make it impossible.",
                     backingLoop: 0,
                     timeSignature: TimeSignature.fourFour,
                     notes: [
@@ -951,7 +958,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Out Loud",
-                    description: `Good so far&mdash;let's do it again! Keep <strong>tapping</strong>, but also <strong>speak the numbers</strong> out loud this time. Oh, by the way&mdash;these are called &quot;whole rests&quot; (${Rest.whole.inlineNotation}).`,
+                    description: `Good so far&mdash;let's do it again! Keep <strong>tapping</strong>, but also <strong>speak the numbers</strong> out loud this time.${tapKeyExplanation}<br/>
+                    <br/>
+                    Oh, by the way&mdash;these are called &quot;whole rests&quot; (${Rest.whole.inlineNotation}).`,
                     timeSignature: TimeSignature.fourFour,
                     notes: [
                         W,
@@ -962,7 +971,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Whole Notes",
-                    description: `Whole <strong>notes</strong> (${Note.whole.inlineNotation}) are just like whole rests (${Rest.whole.inlineNotation}): four beats long.<br/><br/>...Except they're <em>notes</em>. Which means you <em>clap</em> when they start.`,
+                    description: `Whole <strong>notes</strong> (${Note.whole.inlineNotation}) are just like whole rests (${Rest.whole.inlineNotation}): four beats long. ...Except they're <em>notes</em>. Which means you <em>clap</em> when they start.<br/>
+                    <br/>
+                    (Yes, you still need to tap, too! ${clapExplanation} That way you can do them at the same time!)`,
                     timeSignature: TimeSignature.fourFour,
                     notes: [
                         W,
@@ -978,7 +989,7 @@ class Skill {
                 new RandomLevel({
                     name: "Changing It Up",
                     tempo: 100,
-                    description: "Let's mix it up. And speed it up! And finish this first skill up!!",
+                    description: `Let's mix it up. And speed it up! And finish this first skill up!!`,
                     timeSignature: TimeSignature.fourFour,
                     bars: 8,
                     blocks: [

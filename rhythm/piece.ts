@@ -122,21 +122,16 @@ $(document).ready(function() {
         icons: { primary: playButtonIcon }
     }).onButtonPush(togglePlayback);
 
-    let clapKey = "";
-    if (!isMobile()) {
-        if (isMac()) {
-            clapKey = "<br/>(return)"
-        } else {
-            clapKey = "<br/>(enter)"
-        }
-    }
+    const clapKey = isMobile() ? `` : `<br/>(${returnKeyName()})`;
+    const tapKey = isMobile() ? `` : `<br/>(spacebar)`;
+
     $("#clap").button({
         label: "<strong>Clap</strong>" + clapKey,
         disabled: true
     }).onButtonPush(clap);
     
     $("#tap").button({
-        label: "<strong>Tap</strong>" + (isMobile() ? "" : "<br/>(spacebar)"),
+        label: "<strong>Tap</strong>" + tapKey,
         disabled: true
     }).onButtonPush(tap);
 
@@ -180,7 +175,7 @@ $(document).keydown(function(event) {
                 stop();
             }
             break;
-        case $.ui.keyCode.PERIOD: //cheat pass
+        /*case $.ui.keyCode.PERIOD: //cheat pass
             showGradeSummary({
                 clapAccuracy: 1,
                 tapAccuracy: 1,
@@ -192,7 +187,7 @@ $(document).keydown(function(event) {
             break;
         case $.ui.keyCode.COMMA: //cheat fail back to here
             Profile.current.skillState(Skill.current!.id).currentLevel = PieceLevel.current.index;
-            break;
+            break;*/
         default:
     }
 });
