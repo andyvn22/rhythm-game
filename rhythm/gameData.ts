@@ -152,6 +152,31 @@ class Profile {
         return `${Math.floor(this.completionValue * 100)}%`;
     }
 
+    get completionDetails() {
+        let completed: Array<string> = [];
+        let partial: Array<string> = [];
+        for (let skillState of this.skills) {
+            let skill = Skill.forID(skillState.id);
+            if (skill === undefined) { continue; }
+            if (skill.levels.length <= skillState.currentLevel) {
+                completed.push(`<span class="completed-skill">${skill.name}</span>`);
+            } else if (skillState.currentLevel > 0) {
+                partial.push(`<span class="partial-skill">${skill.name}</span>: ${skillState.currentLevel}/${skill.levels.length}`);
+            }
+        }
+
+        let result = ``;
+        if (completed.length > 0) {
+            result += `<h3>Completed Skills</h3>
+            <p class="skill-list">${completed.join(`, `)}</p>`;
+        }
+        if (partial.length > 0) {
+            result += `<h3>Skills In Progress</h3>
+            <p class="skill-list">${partial.join(`, `)}</p>`;
+        }
+        return result;
+    }
+
     get isTrivial() {
         return this.completionValue === 0;
     }
@@ -1744,11 +1769,33 @@ class Skill {
                         Block.required([e, e]),
                         Block.required([e, e]),
                         Block.required([e, E]),
-                        Block.required([E, e])
+                        Block.required([E, e]),
+                        new Block([h]),
+                        new Block([q])
                     ]
                 })
             ]
         });
+
+        /*newSkill({
+            id: "swing",
+            name: "Swing",
+            knownCounts: Count.allExceptCompoundAdvanced,
+            levels: [
+                new ComposedLevel({
+                    name: "Swing",
+                    description: ``,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 100,
+                    notes: [
+                        e, e, e, e, q, Q,
+                        e, e, E, e, H,
+                        q, E, e, q, E, e,
+                        e, e, e, e, H
+                    ]
+                })
+            ]
+        })*/
 
         newSkill({
             id: "dots",

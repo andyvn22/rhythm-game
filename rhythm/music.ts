@@ -124,7 +124,12 @@ class Sound {
 		}
 
 		const rate = tempo/80;
-		if (timeSignature.isCompound) {
+		if (timeSignature.isSwing) {
+			switch(timeSignature.top) {
+				case 2: case 4:
+				case 3:
+			}
+		} else if (timeSignature.isCompound) {
 			switch(timeSignature.top) {
 				case 2: case 4:
 					return new Sound(`loops/compoundQuadruple/${indexTo(6)}`, true, rate);
@@ -837,8 +842,9 @@ type TimeSignatureTop = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 
 class TimeSignature {
 	readonly top: TimeSignatureTop;
 	readonly bottom: Note;
+	readonly isSwing: boolean;
 
-	constructor(top: TimeSignatureTop, bottom: Note) {
+	constructor(top: TimeSignatureTop, bottom: Note, isSwing: boolean = false) {
 		assert(Math.floor(top) === top);
 		assert(top > 0);
 		assert(top <= 10);
@@ -846,6 +852,7 @@ class TimeSignature {
 		
 		this.top = top;
 		this.bottom = bottom.normalized;
+		this.isSwing = isSwing;
 	}
 
 	static get twoFour() { return new TimeSignature(2, Note.quarter); }
@@ -859,6 +866,8 @@ class TimeSignature {
 	static get sixEight() { return new TimeSignature(2, Note.quarter.dotted); }
 	static get nineEight() { return new TimeSignature(3, Note.quarter.dotted); }
 	static get twelveEight() { return new TimeSignature(4, Note.quarter.dotted); }
+
+	get swung() { return new TimeSignature(this.top, this.bottom, true); }
 
 	get isCompound() {
 		return this.bottom.dots == 1;
@@ -1065,6 +1074,15 @@ class Piece {
 			timing += note.relativeLength(timeSignature.bottom);
 			timing = nudgeFloat(timing);
 		}
+		
+		if (timeSignature.isSwing) {
+			for (let event of noteEvents) {
+				if (event.timing % 1 == 0.5) {
+					event.timing += 1/6;
+				}
+			}
+		}
+
 		this.noteEvents = new EventList(noteEvents);
 
 		let beatEvents: Array<MusicEvent> = [];
@@ -1404,9 +1422,10 @@ class Piece {
 		noteElement.parent().children("." + extraTapClass).remove();
 
 		if (!noteEvent.graded) { return; }
+		const length = noteIndex == this.notes.length-1 ? this.beatEvents.last.timing - noteEvent.timing : this.noteEvents.index(noteIndex+1).timing - noteEvent.timing;
 
 		const shouldShowNoteCount = !(note instanceof Rest) || noteEvent.timing === Math.floor(noteEvent.timing);
-		const visibleCountings = (shouldShowNoteCount ? [0] : []).concat(noteEvent.offsetsToBeatsForLength(note.relativeLength(this.timeSignature.bottom)));
+		const visibleCountings = (shouldShowNoteCount ? [0] : []).concat(noteEvent.offsetsToBeatsForLength(length));
 		for (let relativeCounting of visibleCountings) {
 			const absoluteCounting = noteEvent.timing + relativeCounting;
 
@@ -1663,10 +1682,8 @@ class Player {
 
 		var self = this;
 		if (nextBeatTime !== undefined) {
-			console.log(`Scheduled beat!`);
 			this.playback.timerID = window.setTimeout(function() { self.playBeat(); }, nextBeatTime - Date.now());
 		} else {
-			console.log(`Scheduled note!`);
 			this.playback.timerID = window.setTimeout(function() { self.playNote(); }, nextNoteTime - Date.now());
 		}
 

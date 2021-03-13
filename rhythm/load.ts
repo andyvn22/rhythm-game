@@ -29,7 +29,7 @@ $(document).ready(function() {
         oldProfile = Profile.all[0];
         updateButtonLabel = `Load the saved game from this link (${loadedProfile.completionDescription})`;
         showNewButton = false;
-    } else if (Profile.all.length === 1 && !Profile.all[0].hasName && Profile.all[0].completionValue <= loadedProfile.completionValue) {
+    } else if (Profile.all.length === 1 && !Profile.all[0].hasName && Profile.all[0].completionValue < loadedProfile.completionValue) {
         oldProfile = Profile.all[0];
         updateButtonLabel = `Update existing progress (${oldProfile.completionDescription}) to match this link (${loadedProfile.completionDescription})`;
         additionalInfo = `<p>Someone's already reached ${oldProfile.completionDescription} complete on this device. Would you like to replace that existing progress (${oldProfile.completionDescription}) with the saved game in this link (${loadedProfile.completionDescription})?</p>`;
@@ -43,6 +43,7 @@ $(document).ready(function() {
             } else if (matches[0].completionValue === loadedProfile.completionValue) {
                 additionalInfo = `<p>There's an existing player on this device named "${loadedProfile.name}"&mdash;with the exact same ${loadedProfile.completionDescription} completion as the saved game in this link! You must have already loaded this.</p>`;
                 showNewButton = false;
+                Profile.currentIndex = Profile.all.indexOf(matches[0]);
             }
         }
     }
@@ -52,6 +53,7 @@ $(document).ready(function() {
             <p id="preamble"><span class="ui-icon ui-icon-link"></span> This link contains:</p>
             <p id="loadedName">${loadedName} <span id="profileCompletion">(${loadedProfile.completionDescription} complete)</span></p>
             ${additionalInfo}
+            ${loadedProfile.completionDetails}
         </div>
         <div id="buttons"></div>
     </div>`);
