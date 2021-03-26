@@ -127,7 +127,7 @@ class Sound {
 		if (timeSignature.isSwing) {
 			switch(timeSignature.top) {
 				case 2: case 4:
-				case 3:
+					return new Sound(`loops/swingQuadruple/${indexTo(4)}`, true, rate);
 			}
 		} else if (timeSignature.isCompound) {
 			switch(timeSignature.top) {
@@ -744,6 +744,7 @@ class Count {
 	static get all() { return AllCountNames.map(x => new Count(x)); }
 	
 	static get allExceptCompoundAdvanced() { return this.allSimple.concat(this.allCompoundBasic); }
+	static get allSwing() { return this.allSimpleBasic.concat([new Count("ma")]); }
 }
 
 type TimingPrecision = "on" | "a little before" | "a little after";
@@ -1573,8 +1574,8 @@ class Player {
 
 		this.piece.showTooltips(false);
 		this.rewind();
-		
-		const delayUntilStart = countOff ? this.piece.timeSignature.milliseconds(this.piece.timeSignature.countoff.notes, this.tempo) : 0;
+
+		const delayUntilStart = countOff ? this.piece.timeSignature.countoff.end * Player.beatLength(this.tempo) : 0;
 		this.playback = {
 			startTime: Date.now() + delayUntilStart,
 			nextNote: (countOff ? -this.piece.timeSignature.countoff.notes.length : 0),
@@ -1665,9 +1666,8 @@ class Player {
 		let nextBeatTime: number | undefined = undefined;
 		if (this.isCountingOff) {
 			const countoffIndex = this.playback.nextNote + this.piece.timeSignature.countoff.notes.length;
-			const remainingCountoff = this.piece.timeSignature.countoff.notes.slice(countoffIndex);
-			const remainingTime = this.piece.timeSignature.milliseconds(remainingCountoff, this.tempo);
-			nextNoteTime = this.playback.startTime - remainingTime;
+			const timing = this.piece.timeSignature.countoff.noteEvents.index(countoffIndex).timing - this.piece.timeSignature.countoff.end;
+			nextNoteTime = this.playback.startTime + (timing * Player.beatLength(this.tempo));
 		} else {
 			const isAtEnd = this.playback.nextNote == this.piece.notes.length;
 			const nextNoteTiming = isAtEnd ? this.piece.end : this.piece.noteEvents.index(this.playback.nextNote).timing;

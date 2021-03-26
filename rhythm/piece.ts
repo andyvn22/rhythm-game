@@ -79,7 +79,25 @@ function showGradeSummary(gradingInfo = player.piece.gradingInfo(player.tempo)) 
     function formatSummary(summary: string, passed: boolean) {
         const hue = Piece.hueForAccuracy(passed ? 1 : 0);
         const icon = passed ? "check" : "cancel";
-        return `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
+        let result = `<p style="color: hsl(${hue},80%,40%)"><span class="ui-icon ui-icon-${icon}"></span> ${summary}</p>`;
+        const failedAttempts = Profile.current.skillState(Skill.current!.id).failedAttempts;
+        if (!passed && failedAttempts > 1) {
+            let tips = [
+                `You're doing some great hard work, here! Are you <strong>counting out loud</strong> with your voice? It feels harder at first, but it helps you <strong>understand</strong> the rhythms better, so it will eventually help you master this level!`,
+                `Keep up this awesome effort! Try clicking the <strong>&quot;Grade Details&quot; button below</strong> to see what's giving you trouble&mdash;you can scroll around and <strong>check each red note, rest, or count</strong>. Try the hardest parts <strong>slowly by themselves</strong> before replaying!`
+            ];
+            if (Level.current!.index > 1 && failedAttempts > 2) {
+                tips.push(`You're so dedicated and hardworking! If you're feeling really stuck, try jumping back to the <strong>beginning of this skill and replay</strong> carefully, counting out loud&mdash;that will help <strong>build up the skills</strong> you need to conquer this level!`);
+            }
+            if (Skill.current!.id === "welcome" && Level.current!.index === 2) {
+                tips = [
+                    `Remember, you need to <strong>tap</strong> on <strong>every number</strong>, <em>and</em> <strong>clap</strong> at the start of each <strong>note</strong>. That means for this level you'll need to hit: tap, tap, tap, tap, <strong>both</strong>, tap, tap, tap...`,
+                    `You can click the &quot;Grade Details&quot; button below to see exactly what you're missing&mdash;check which things are red. If there's a red <strong>number</strong> you missed a <strong>tap</strong>, but if there's a red <strong>note</strong> you missed a <strong>clap</strong>. (If there's a red <strong>rest</strong> you clapped extra!)`
+                ];
+            }
+            result += `<p>${tips[Math.floor(Math.random() * tips.length)]}</p>`;
+        }
+        return result;
     }
 
     const content = `

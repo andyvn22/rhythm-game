@@ -88,6 +88,7 @@ function skillIsComplete(skillID: string) {
 /** Returns true if and only if all requirements for the given skill element are completed. */
 function skillElementIsUnlocked(element: JQuery<HTMLElement>) {
     if (isCheating()) { return true; }
+    else if (Profile.current.skillState(element.attr("id")!).currentLevel > 0) { return true; }
 
     const requirements = element.data("requirements");
     if (requirements !== undefined) {

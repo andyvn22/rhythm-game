@@ -148,13 +148,13 @@ FOR RELEASE:
 + Add quizzes about the meanings of counts
 
 TESTING:
-    * On iPhone (Blake)
-    * On slow iPhone (Mercutio)
-    * On Chrome (Mac)
-    * On Chrome (Windows)
-    * On Firefox (Mac)
-    - On Firefox (Windows)
-    * On Internet Explorer
+    + On iPhone (Blake)
+    + On slow iPhone (Mercutio)
+    + On Chrome (Mac)
+    + On Chrome (Windows)
+    + On Firefox (Mac)
+    * On Firefox (Windows)
+    + On Internet Explorer
         + Create fallback bass drum sounds played & timed by YOU (the way you do your claps), because looping background tracks do not work if Howler falls back from WebAudio to HTML5.
         + Make the correct/incorrect tooltips in the quizzes actually work. (What the heck, IE!?)
         + Change Tap key command so that Windows doesn't yell about sticky keys
@@ -162,26 +162,29 @@ TESTING:
         + Fix time signatures (ligature issue?)
         + Fix count & extra clap placement (it's now correct... until it starts scrolling.)
         + Fix score summary layout (grid)
-    - On Edge
-    - On Android (what browsers?)
+    * On Edge
+    * On Android (what browsers?)
 
 POST-RELEASE:
 + Make a "Revive" link to undo player deletion.
 + Make it much clearer in Welcome how to tap, how to clap, and that you should do both simultaneously
 + When attempting to load a duplicate profile, switch to it
 + Can you list completed skills & levels in some sort of pretty summary when loading a saved link?
-- Add custom feedback for specific levels? Or just hardcode in some stuff for the beginning: you need specific checks for the first time they're asked to clap and tap simultaneously.
-    - These specific level 3 "clap and tap simultaneously" explanations are REQUIRED for new players to succeed.
-    - You may also need to encourage stuck players to click the "Grade Details" button, either for early levels, or all levels?
-* Swing
++ Add custom feedback for specific levels? Or just hardcode in some stuff for the beginning: you need specific checks for the first time they're asked to clap and tap simultaneously.
+    + These specific level 3 "clap and tap simultaneously" explanations are REQUIRED for new players to succeed.
+    + You may also need to encourage stuck players to click the "Grade Details" button, replay earlier levels, count out loud, etc.
++ Add many reminders to count out loud and explain why it's important
++ Mention about when to clap vs. tap in Friendly Eighth Notes
++ More discussion of chunking Lonely Eighth Notes in beats
++ Swing
     + Add swing support to time signatures
-    - Adjust countoffs to use actual `Piece` timings instead of context-blind `TimeSignature.millliseconds` (to swing "rea-dy")
-    - Write actual swing skills
+    + Adjust countoffs to use actual `Piece` timings instead of context-blind `TimeSignature.millliseconds` (to swing "rea-dy")
+    + Write actual swing skills
+    + Swing quadruple loops
 - Randomly select from MANY grading summary messages; students will see them very frequently so they should be varied.
     - Include praise for hard work & suggestion of going back to earlier levels.
 - Improve style and content of grading tooltips; focus on important content
 - Add the ability to include a detailed explanation to a quiz question, and then calculate them for length quizzes, a little like you did for the Twine clone.
-- MOAR LOOPS!!!11
 - Can you check counts via speech recognition?
 - Add timing precision and latency adjustment settings
 + Cancel scrolling of piece immediately when you click "Stop"

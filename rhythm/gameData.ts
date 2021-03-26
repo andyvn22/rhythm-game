@@ -41,15 +41,25 @@ jQuery.fn.extend({
 class SkillState {
     readonly id: string;
     private _currentLevel: number;
+    private _failedAttempts: number;
+
     get currentLevel() { return this._currentLevel; }
     set currentLevel(newValue) {
         this._currentLevel = newValue;
+        this._failedAttempts = 0;
         Profile.update();
     }
 
-    constructor(id: string, currentLevel = 0) {
+    get failedAttempts() { return this._failedAttempts; }
+    set failedAttempts(newValue) {
+        this._failedAttempts = newValue;
+        Profile.update();
+    }
+
+    constructor(id: string, currentLevel = 0, failedAttempts = 0) {
         this.id = id;
         this._currentLevel = currentLevel;
+        this._failedAttempts = failedAttempts;
     }
 }
 
@@ -83,7 +93,8 @@ class Profile {
         const params = new URLSearchParams(profileCode);
         let name = "";
         let finishedSkill = "";
-        let skills: Array<SkillState> = [];
+        let result: Array<SkillState> = [];
+        let skillsFailedAttempts = Object.create(null);
         params.forEach(function(value, key) {
             switch (key) {
                 case "name":
@@ -93,10 +104,14 @@ class Profile {
                     finishedSkill = value;
                     break;
                 default:
-                    skills.push(new SkillState(key, parseInt(value)));
+                    if (key.indexOf("failedAttempts-") === 0) {
+                        skillsFailedAttempts[key.slice(15)] = parseInt(value);
+                    } else {
+                        result.push(new SkillState(key, parseInt(value), skillsFailedAttempts[key]));
+                    }
             }
         });
-        return new Profile(name, skills, finishedSkill);
+        return new Profile(name, result, finishedSkill);
     }
 
     encode() {
@@ -105,6 +120,9 @@ class Profile {
         params.append("finishedSkill", this.finishedSkill);
         for (let skill of this.skills) {
             if (skill.currentLevel == 0) { continue; }
+            if (skill.failedAttempts > 0) {
+                params.append(`failedAttempts-${skill.id}`, skill.failedAttempts.toString());
+            }
             params.append(skill.id, skill.currentLevel.toString());
         }
         return params.toString();
@@ -349,7 +367,7 @@ abstract class Level {
         const exitButton = $(`<div style="position: fixed; left: 1em; top: 1em; z-position: 1000;" id="exitButton"></div>`);
         $(document.body).append(exitButton);
         exitButton.button({
-            label: "Exit Level",
+            label: `Exit Level`,
             icons: { primary: "ui-icon-home" }
         }).on("click", function() {
             Level.exit();
@@ -423,6 +441,7 @@ abstract class Level {
                 });
             }
         } else {
+            Level.fail();
             buttons.push({
                 text: "Try Again",
                 icon: "ui-icon-refresh",
@@ -461,6 +480,15 @@ abstract class Level {
             if (Skill.current.levels.length === Level.current!.index + 1) {
                 Profile.current.finishedSkill = Skill.current.id;
             }
+        }
+    }
+
+    /** If the current level is the last unlocked skill, advances the failure count for that skill by one; call only from a level page (when it's failed). */
+    static fail() {
+        if (Skill.current === undefined) { assertionFailure(); }
+        if (Profile.current.skillState(Skill.current.id).currentLevel === Level.current!.index) {
+            Profile.current.skillState(Skill.current.id).failedAttempts++;
+            console.log(Profile.current.skillState(Skill.current.id).failedAttempts);
         }
     }
 
@@ -1014,7 +1042,9 @@ class Skill {
                 new RandomLevel({
                     name: "Changing It Up",
                     tempo: 100,
-                    description: `Let's mix it up. And speed it up! And finish this first skill up!!`,
+                    description: `Let's mix it up. And speed it up! And finish this first skill up!!<br/>
+                    <br/>
+                    (And keep counting out loud!)`,
                     timeSignature: TimeSignature.fourFour,
                     bars: 8,
                     blocks: [
@@ -1137,7 +1167,10 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Ignore the Four",
-                    description: `Quarter rests are one beat long and they look like... well... I'm not even sure. Weird little squiggly things (${Rest.quarter.inlineNotation})? Yes, that.`,
+                    description: `Quarter rests are one beat long and they look like... well... I'm not even sure. Weird little squiggly things (${Rest.quarter.inlineNotation})? Yes, that.<br/>
+                    <br/>
+                    Don't forget to count out loud every time you tap! Even if there's a rest, or you're partway through a note, if you're tapping, you're counting.<br/>
+                    It's how the beats know you care about them. Be nice.`,
                     timeSignature: TimeSignature.fourFour,
                     notes: [
                         q, q, q, Q,
@@ -1203,6 +1236,8 @@ class Skill {
                 new RandomLevel({
                     name: "All Together Now",
                     description: `So you know them all&mdash;excellent. But can you <em>clap</em> them all!?<br/>
+                    And <em>tap</em> them all?<br/>
+                    And <em>count</em> them all!?<br/>
                     <br/>
                     Let's find out.`,
                     timeSignature: TimeSignature.fourFour,
@@ -1232,7 +1267,9 @@ class Skill {
                 }),
                 new RandomLevel({
                     name: "100 bpm",
-                    description: "Can you keep up?<br/><br/>...'Cause <em>I</em> can. Just sayin&apos;. I'm great at this one. Like... <em>so</em> good.",
+                    description: `Can you keep up?<br/><br/>...'Cause <em>I</em> can. Just sayin&apos;. I'm great at this one. Like... I'm so confident that I basically <strong>YELL</strong> every single count.<br/>
+                    <br/>
+                    My neighbors love it.`,
                     timeSignature: TimeSignature.fourFour,
                     bars: 8,
                     tempo: 100,
@@ -1271,7 +1308,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Two Again",
-                    description: "You realize that if you say &quot;three&quot; or &quot;four&quot; in here you're going to make Reginald <em>very</em> angry, right? Because there's a two on top of the time signature, there are only two beats in each measure.",
+                    description: `You realize that if you say &quot;three&quot; or &quot;four&quot; in here you're going to make Reginald <em>very</em> angry, right? Because there's a two on top of the time signature, there are only two beats in each measure.<br/>
+                    <br/>
+                    And you also realize that &quot;counting <em>in your head</em>&quot; is <em>cheating</em>, right? If you're not speaking out loud, you're gonna get stuck later!`,
                     timeSignature: TimeSignature.twoFour,
                     notes: [
                         q, q,
@@ -1360,7 +1399,7 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Now This is Just Silly",
-                    description: "...I'm... I'm sorry about this...",
+                    description: "...I'm... I'm sorry about this...<br/><br/>Although it's kinda fun to speak.",
                     timeSignature: new TimeSignature(1, q),
                     notes: [
                         q,
@@ -1487,7 +1526,8 @@ class Skill {
                     name: "Friendly Eighth Notes",
                     description: `Eighth notes (${Note.eighth.inlineNotation}) look like a quarter notes (${Note.quarter.inlineNotation}), but with flags coming off of &apos;em, or beams connecting them. They're only <strong>half</strong> a beat long. That means two of them fit on every beat.<br/>
                     <br/>
-                    Oh... you'll need to clap halfway between two beats sometimes, now. When you do, say &quot;and&quot; (write &quot;+&quot;).`,
+                    Oh... you'll need to <strong>clap</strong> halfway <strong>between</strong> two beats sometimes, now. When you do, say &quot;and&quot; (write &quot;+&quot;).<br/>
+                    This is the first time we'll clap <em>between</em> taps&mdash;fun! We've tapped without clapping before, but this is the first time we've ever <em>clapped</em> without <em>tapping</em>. (Good; I think those claps need to become more independent, anyway!)`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1499,7 +1539,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Split One, Two",
-                    description: "How are these pieces I'm writing for you? Are they any good? I can't read music, so I wouldn't know.",
+                    description: `Remember, of course you'll <em>clap</em> on every note&mdash;but for your <em>taps</em> you only tap on the <em>beats</em> (the numbers) and not on the &quot;and&quot;s.<br/>
+                    <br/>
+                    By the way, how are these pieces I'm writing for you? Are they any good? I can't read music, so I wouldn't know.`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1531,7 +1573,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Four in a Row",
-                    description: `Have you noticed eighth notes (${Note.eighth.inlineNotation}) are exactly twice as fast as quarter notes (${Note.quarter.inlineNotation})? No? Shame on you. These poor eighth notes, crawling all over the page for you, and you're neglecting their little feelings. Think about their lengths!`,
+                    description: `Have you noticed eighth notes (${Note.eighth.inlineNotation}) are exactly twice as fast as quarter notes (${Note.quarter.inlineNotation})? No? Shame on you. These poor eighth notes, crawling all over the page for you, and you're neglecting their little feelings. Think about their lengths!<br/>
+                    <br/>
+                    Also, make sure you're counting them out loud! Some of them are on numbers, and others are on &quot;and&quot;&mdash;but we <em>speak</em> for all of them!`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1563,7 +1607,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "No Extra Ands",
-                    description: `Be on the lookout for quarter notes (${Note.quarter.inlineNotation})! They're hiding in there, amongst the eighths (${Note.eighth.inlineNotation}).<br/><br/>Quarter notes are known to be sneaky.`,
+                    description: `Be on the lookout for quarter notes (${Note.quarter.inlineNotation})! They're hiding in there, amongst the eighths (${Note.eighth.inlineNotation}).<br/><br/>Quarter notes are known to be sneaky.<br/>
+                    <br/>
+                    You know what <em>else</em> is sneaky? &quot;Counting in your head&quot;. Make sure you're making audible noises, or you're gonna get stuck soon. (Preferably count-like noises, not just like... mooing or something.)`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1603,7 +1649,7 @@ class Skill {
             levels: [
                 new ComposedLevel({
                     name: "Eighth Rests",
-                    description: `Eighth rests look like... a really fancy seven, I guess (${Rest.eighth.inlineNotation}). I don't know&mdash;look, the point is they're half a beat long, so one beat can fit two eighth rests.<br/><br/>Do you remember when to count &quot;and&quot; (+)? When you're <em>clapping</em> halfway between beats&mdash;in other words, <strong>not now!</strong>`,
+                    description: `Eighth rests look like... a really fancy seven, I guess (${Rest.eighth.inlineNotation}). I don't know&mdash;look, the point is they're half a beat long, so one beat can fit two eighth rests.<br/><br/>Do you remember when to count &quot;and&quot; (+)? When you're <em>clapping</em> halfway between beats&mdash;in other words, <strong>not now!</strong> Numbers only!`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1631,7 +1677,10 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Extra And",
-                    description: "Remember&mdash;you should only speak if you're either clapping or tapping. Not if you're rapping. Or zapping. Or napping.<br/><br/>Especially napping.<br/><br/>Or mapping. (I didn't even know you were into cartography!)",
+                    description: `Try to see the lonely eighth note as having an eighth rest friend (${Note.eighth.inlineNotation}${Rest.eighth.inlineNotation})&mdash;they come in a pair! Not only does this help you group the music into one-beat-long chunks, it also makes the lonely eighth notes less lonely.<br/>
+                    And remember&mdash;you should only speak if you're either clapping or tapping. Not if you're rapping. Or zapping. Or napping.<br/><br/>
+                    Especially napping.<br/><br/>
+                    Or mapping. (I didn't even know you were into cartography!)`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1675,7 +1724,8 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Odd Rests",
-                    description: "Giving a confident tap on the odd-numbered beats may help with this one. Or it may just make you look cool. Either way, you should probably go for it.",
+                    description: `Now our lonely eighth note/eighth rest pairs are <em>backwards</em> (${Rest.eighth.inlineNotation}${Note.eighth.inlineNotation})&mdash;so the rest is on the beat, and gets counted out loud this time.<br/>
+                    Shouting the number and giving an extra-confident tap on those rest-y beats may help with this one. Or it may just make you look cool. Either way, you should probably go for it.`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1687,7 +1737,12 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Even More",
-                    description: "Something something even numbered beats mumble.<br/><br/>I'm tired today; you're on your own.",
+                    description: `Something something even numbered beats mumble.<br/>
+                    I'm tired today; you're on your own.<br/><br/>
+                    Just like those lonely eighth notes.<br/>
+                    Except they're not alone&mdash;they have their eighth rest friends! Try to see them in pairs: ${Rest.eighth.inlineNotation}${Note.eighth.inlineNotation}!<br/>
+                    <br/>
+                    ...Huh, I guess I gave you advice after all.`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1709,7 +1764,9 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Offbeats",
-                    description: "Keep that beat steady and bounce your &quot;and&quot;s off it.<br/><br/>You know, some people call <em>me</em> &quot;off-beat&quot;. ...I'm not sure what they mean.",
+                    description: `Keep that beat steady and bounce your &quot;and&quot;s off it.<br/><br/>
+                    You know, some people call <em>me</em> &quot;off-beat&quot;. ...I'm not sure what they mean.<br/>
+                    Anyway, <strong>ONE AND TWO AND THREE AND FOUR AND!</strong>`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1725,7 +1782,10 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Dotted Quarters Without the Dots",
-                    description: "Don't understand the name? You will later...<br/><br/>I mean, I hope you will. I don't know. Maybe you won't.",
+                    description: `Don't understand the name? You will later...<br/><br/>I mean, I hope you will. I don't know. Maybe you won't.<br/>
+                    <br/>
+                    Anyway, our pairs are all mixed together now! First, there's one of these: ${Note.eighth.inlineNotation}${Rest.eighth.inlineNotation} and you're all like, &quot;<strong>ONE!</strong>&quot;<br/>
+                    Then, there's one of these: ${Rest.eighth.inlineNotation}${Note.eighth.inlineNotation} and you're all like, &quot;two <strong>AND</strong>!&quot;`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1741,7 +1801,7 @@ class Skill {
                 }),
                 new ComposedLevel({
                     name: "Almost There...",
-                    description: "This one's tough, but you're almost there... eh, never mind, just give up now.<br/><br/>Still here? Good... goooooooood...",
+                    description: "This one's tough, but you're almost there... eh, never mind, just give up now.<br/><br/>Still here? Good... goooooooood... My plan is coming to fruition...",
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     notes: [
@@ -1757,7 +1817,11 @@ class Skill {
                 }),
                 new RandomLevel({
                     name: "Still More in the Mix",
-                    description: "It's the eighth-noteiest!&trade;",
+                    description: `It's the eighth-noteiest!&trade;<br/>
+                    <br/>
+                    You can do this&mdash;keep up the good work, and search for those two different kinds of pairs:<br/>
+                    This: ${Note.eighth.inlineNotation}${Rest.eighth.inlineNotation} just sits there on the beat. It's basically just like a quarter note (${Note.quarter.inlineNotation})!<br/>
+                    But, this: ${Rest.eighth.inlineNotation}${Note.eighth.inlineNotation} is more complicated&mdash;first a rest on the beat (tap, don't clap), then a note on the &quot;and&quot; (clap, don't tap)!`,
                     timeSignature: TimeSignature.fourFour,
                     tempo: 60,
                     bars: 8,
@@ -1771,31 +1835,348 @@ class Skill {
                         Block.required([e, E]),
                         Block.required([E, e]),
                         new Block([h]),
+                        new Block([h]),
+                        new Block([q]),
+                        new Block([q]),
                         new Block([q])
                     ]
                 })
             ]
         });
 
-        /*newSkill({
-            id: "swing",
+        newSkill({
+            id: "swing1",
             name: "Swing",
-            knownCounts: Count.allExceptCompoundAdvanced,
+            knownCounts: Count.allSwing,
             levels: [
                 new ComposedLevel({
-                    name: "Swing",
-                    description: ``,
+                    name: "Lopsided Eighth Notes",
+                    description: `&quot;Swing&quot; is a style of music that affects how we read rhythms. Don't worry, there's a simple rule to follow&mdash;but it changes <em>so much</em>:<br/>
+                    <br/>
+                    Anything that looks like &quot;and&quot; (<strong>halfway</strong> through the beat) gets moved to &quot;ma&quot; (<strong>&frac23;</strong> of the way through the beat).<br/>
+                    <br/>
+                    (For anyone whose math brain is asleep right now, &quot;ma&quot; is a little <strong>later</strong> than &quot;and&quot;.) What does this do to our friendly eighth notes? Well... it makes them feel kind of... lopsided...`,
                     timeSignature: new TimeSignature(4, q).swung,
-                    tempo: 100,
+                    tempo: 60,
                     notes: [
-                        e, e, e, e, q, Q,
-                        e, e, E, e, H,
-                        q, E, e, q, E, e,
-                        e, e, e, e, H
+                        e, e, e, e, e, e, e, e,
+                        q, q, q, q,
+                        e, e, e, e, e, e, e, e,
+                        h, Q, q
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Split One, Three",
+                    description: `Weird, right? Yes, this means that our eighth notes are no longer half a beat long each.<br/>
+                    In fact, they're not even the same length as each other! The ones <em>on</em> the beat are longer than the ones on <em>ma</em>.<br/>
+                    Oh, Swing, you're so crazy!`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 60,
+                    notes: [
+                        e, e, q, q, q,
+                        e, e, q, h,
+                        e, e, q, q, q,
+                        w,
+                        h, e, e, q,
+                        q, q, e, e, q,
+                        h, e, e, q,
+                        w
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Split Two, Four",
+                    description: `How can you tell which kid on the playground has a jazz trombonist parent?<br/>
+                    <br/>
+                    Just look for whoever's extra-good at swinging... and using the slide.`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 60,
+                    notes: [
+                        q, e, e, q, q,
+                        q, e, e, h,
+                        q, e, e, q, q,
+                        w,
+                        q, q, q, e, e,
+                        q, q, q, e, e,
+                        q, q, q, e, e,
+                        w
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Fast in a Row",
+                    description: `Ready to swing even faster?<br/>
+                    No?<br/>
+                    <br/>
+                    Too bad!`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 80,
+                    notes: [
+                        e, e, e, e, q, q,
+                        e, e, e, e, h,
+                        e, e, e, e, q, q,
+                        Q, q, Q, q,
+                        q, q, e, e, e, e,
+                        q, q, e, e, e, e,
+                        q, q, e, e, e, e,
+                        q, q, h
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Unexpected II",
+                    description: `...<br/><br/>...Arf?`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 80,
+                    notes: [
+                        q, e, e, e, e, q,
+                        q, e, e, e, e, q,
+                        q, e, e, e, e, q,
+                        Q, q, Q, q,
+                        e, e, q, q, e, e,
+                        e, e, q, q, e, e,
+                        e, e, q, q, e, e,
+                        w
+                    ]
+                }),
+                new RandomLevel({
+                    name: "Mixed Swing",
+                    description: `Let's mix up these swing rhythms!<br/><br/>They don't mind. I asked them first.`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 60,
+                    bars: 8,
+                    blocks: [
+                        Block.required([h]),
+                        Block.required([H], [0,2]),
+                        Block.required([q]),
+                        Block.required([Q, q]),
+                        Block.required([e, e, e, e]),
+                        Block.required([e, e, q]),
+                        Block.required([e, e, h])
+                    ]
+                }),
+                new RandomLevel({
+                    name: "Faster Mixed Swing",
+                    description: `let'smixuptheseswingrhythmstheydon'tmindiaskedthemfirst!`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 80,
+                    bars: 8,
+                    blocks: [
+                        Block.required([h]),
+                        Block.required([H], [0,2]),
+                        Block.required([q]),
+                        Block.required([Q, q]),
+                        Block.required([e, e, e, e]),
+                        Block.required([e, e, q]),
+                        Block.required([e, e, h])
                     ]
                 })
             ]
-        })*/
+        });
+
+        newSkill({
+            id: "swing2",
+            name: "More Swing",
+            knownCounts: Count.allSwing,
+            levels: [
+                new RandomLevel({
+                    name: "Speed Review",
+                    description: `Do you remember how swing turns &quot;and&quot;s into &quot;ma&quot;s?<br/>
+                    <br/>
+                    ...How <em>quickly</em> can you remember?`,
+                    timeSignature: new TimeSignature(4, q).swung,
+                    tempo: 100,
+                    bars: 8,
+                    blocks: [
+                        Block.required([h]),
+                        Block.required([H], [0,2]),
+                        Block.required([q]),
+                        Block.required([Q, q]),
+                        Block.required([e, e, e, e]),
+                        Block.required([e, e, q]),
+                        Block.required([e, e, h])
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Pickups!",
+                    description: `Think of those lonely &quot;ma&quot;s as leading forward into the next beat.<br/>
+                    They're... really close to the next beat. Bein' all &frac23; of the way to it and all.`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        E, e, q, E, e, q,
+                        Q, E, e, h,
+                        E, e, q, E, e, q,
+                        H, E, e, q
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Swung Odd Rests",
+                    description: `My advice for this one stands: tapping confidently on the odd-numbered beats is how cool people behave.<br/>
+                    <br/>
+                    Also, it might help you with the piece or whatever.`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        E, e, e, e, E, e, e, e,
+                        E, e, e, e, h,
+                        E, e, e, e, E, e, e, e,
+                        E, e, e, e, q, q
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Even More Swing",
+                    description: `Are you still counting out loud? I would hate for you to forget that there are definitely no &quot;and&quot;s in here!<br/>
+                    <br/>
+                    Remember the whole point of swing: anything that <em>looks</em> like &quot;and&quot; is really &quot;ma&quot; in disguise.`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        e, e, E, e, e, e, E, e,
+                        e, e, E, e, q, Q,
+                        e, e, E, e, e, e, E, e,
+                        e, e, E, e, e, E, Q
+                    ]
+                }),
+                new RandomLevel({
+                    name: "More Mixed Swing",
+                    description: "Just keep swinging, just keep swinging...",
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    bars: 8,
+                    blocks: [
+                        Block.required([h]),
+                        Block.required([H], [0,2]),
+                        Block.required([q]),
+                        Block.required([Q]),
+                        Block.required([e, e]),
+                        Block.required([e, e]),
+                        Block.required([e, E]),
+                        Block.required([E, e]),
+                        new Block([h]),
+                        new Block([h]),
+                        new Block([q]),
+                        new Block([q]),
+                        new Block([q])
+                    ]
+                })
+            ]
+        });
+
+        newSkill({
+            id: "swing3",
+            name: "Swingcopation",
+            knownCounts: Count.allSwing,
+            levels : [
+                new ComposedLevel({
+                    name: "Dots, not Dahts",
+                    description: `Let's warm up first... this is technically not syncopation. But it <em>is</em> swung!`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 100,
+                    notes: [
+                        dq, e, h,
+                        Q, q, q, q,
+                        dq, e, h,
+                        Q, q, q, q,
+                        dq, e, dq, e,
+                        dq, e, dq, e,
+                        w,
+                        W
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Hide the Two, Swung",
+                    description: `Daht doo-doo-dooooooo... Doo-dah doo-dooooooo...<br/>
+                    Doo-dah doo-dooooooo... ... DAHT! ... DAHT!<br/>
+                    Daht doo-daht! Doo-daht daht!<br/>
+                    Doo-daht daht! ... daht! DOOOOOOOOOOOOOOO.<br/>
+                    <br/>
+                    ...Oh, hello! Um, hi. I was just... singing this next piece. (Or should I say &quot;<em>swing</em>ing&quot; this next piece?)`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        q, e, e, h,
+                        e, q, e, h,
+                        e, q, e, h,
+                        Q, q, Q, q,
+                        q, e, e, H,
+                        e, q, e, H,
+                        e, q, e, Q, q,
+                        w
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Hide the Four, Swung",
+                    description: `Second verse, similar but not identical to the first!<br/><br/>
+                    Dooooooo...daht doo-doo-doooooooo...doo-dah doo-dooooooooo...`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        h, q, e, e,
+                        h, e, q, e,
+                        h, e, q, e,
+                        w,
+                        H, q, e, e,
+                        H, e, q, e,
+                        H, e, q, e,
+                        Q, q, Q, q
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "Hide the Three, Swung",
+                    description: `This one's a little rough, but you're hot stuff&mdash;your skills should be enough.<br/>
+                    <br/>
+                    ...marshmallow fluff...<br/>
+                    (I ran out of rhymes.)`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        q, q, e, e, q,
+                        q, e, q, e, q,
+                        q, e, q, e, q,
+                        Q, q, Q, q,
+                        Q, q, e, e, Q,
+                        Q, e, q, e, Q,
+                        Q, e, q, e, q,
+                        W
+                    ]
+                }),
+                new ComposedLevel({
+                    name: "String of Swing",
+                    description: `It's a cool thing.`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    notes: [
+                        w,
+                        e, e, E, e, E, e, q,
+                        w,
+                        e, e, E, e, E, e, q,
+                        H, h,
+                        e, e, E, e, E, e, q,
+                        H, h,
+                        w
+                    ]
+                }),
+                new RandomLevel({
+                    name: "Swingcopation",
+                    description: `You can never have too much of a good swing!`,
+                    timeSignature: TimeSignature.fourFour.swung,
+                    tempo: 80,
+                    bars: 8,
+                    blocks: [
+                        Block.required([q, e, e, H]),
+                        Block.required([e, q, e, H]),
+                        Block.required([Q, q, e, e, Q]),
+                        Block.required([Q, e, q, e, Q]),
+                        Block.required([e, q, e], [0]),
+                        Block.required([e, q, e], [1]),
+                        Block.required([e, q, e], [2]),
+                        new Block([q]),
+                        new Block([Q]),
+                        new Block([e, e]),
+                        new Block([h]),
+                        new Block([H]),
+                    ]
+                })
+            ]
+        });
 
         newSkill({
             id: "dots",
@@ -5364,7 +5745,7 @@ class Skill {
                         s, e, e, e, s, h,
                         q, q, q, q,
                         s, e, e, e, e, s, e, q,
-                        s, e, e, e, e, e, e, s, q,
+                        s, e, e, e, e, e, e, s, e,
                         s, e, e, e, e, e, e, e, s,
                         q, s, e, s, q, Q
                     ]
