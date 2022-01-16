@@ -38,6 +38,24 @@
 				"showReuseMessage": false,
 				"clear": false
 			}
+		},
+		{
+			"type": "shell",
+			"command": "npx gh-pages --dist rhythm --message \"Deploy to GitHub Pages\" --no-history",
+			"group": "build",
+			"label": "Deploy to GitHub Pages",
+			"dependsOn": [
+				"Build"
+			],
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"revealProblems": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": false
+			}
 		}
 	]
 }

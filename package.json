@@ -1,12 +1,15 @@
 {
   "name": "rhythm-game",
   "version": "1.0.0",
+  "homepage": "https://rhythm.in-the-band.net/",
   "dependencies": {
     "@types/howler": "^2.2.1",
     "@types/jquery": "^3.5.1",
     "@types/jqueryui": "^1.12.13"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "gh-pages": "^3.2.3"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

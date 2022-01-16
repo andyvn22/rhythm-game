@@ -5,7 +5,7 @@
  */
 function isMobileSafari() {
     var safari = !!navigator.userAgent.match(/Version\/[\d\.]+.*Safari/);
-    var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     return safari && iOS;
 }
 
