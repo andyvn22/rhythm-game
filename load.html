@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, viewport-fit=cover"/>
+	<title>Rhythm Game</title>
+	<link rel="stylesheet" href="include/jquery-ui.css"/>
+	<link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
+</head>
+<body>
+	<style>
+		*,
+		*:before,
+		*:after {
+			-webkit-box-sizing: border-box;
+			-moz-box-sizing: border-box;
+			box-sizing: border-box;
+		}
+		
+		html, body {
+			min-height: 100%;
+			text-align: center;
+            padding: 0;
+            margin: 0;
+
+			user-select: none;
+			-webkit-user-select: none;
+			cursor: default;
+
+            position: relative;
+            z-index: -1000;
+            background-color: black;
+            background-image: url("media/space.jpg");
+		}
+
+        div.ui-widget-overlay.ui-front {
+            background: black !important;
+        }
+
+        fieldset {
+            margin-top: 2em;
+            border-radius: 1em;
+        }
+
+        fieldset legend {
+            text-align: left;
+            margin-left: 0.3em;
+        }
+
+        #loadedProfile {
+            border: 1px solid black;
+            border-radius: 0.8em;
+            padding: 0.2em;
+            margin-bottom: 1em;
+        }
+
+        #preamble {
+            font-size: 0.9em;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        #loadedName {
+            margin-top: 0.3em;
+            margin-bottom: 0.6em;
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        #profileCompletion {
+            font-size: 0.6em;
+            color: rgb(145, 122, 76);
+        }
+
+        #updateButton {
+            color: rgb(212, 201, 45);
+            margin-bottom: 0.6em;
+        }
+
+        #addAsNewButton {
+            color: rgb(70, 224, 70);
+        }
+
+        h3 {
+            font-size: 0.8em;
+            margin-bottom: 0;
+        }
+
+        .skill-list {
+            margin-top: 0.4em;
+            font-size: 0.8em;
+        }
+
+        .completed-skill {
+            color: rgb(145, 122, 76);
+        }
+
+        .partial-skill {
+            color: rgb(21, 21, 221);
+        }
+    </style>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>
+	<script src="include/jquery-1.12.2.min.js"></script>
+	<script src="include/jquery-ui.min.js"></script>
+	<script src="include/howler.core.js"></script>
+	<script src="music.js"></script>
+	<script src="gameData.js"></script>
+
+    <script src="load.js"></script>
+
+    <div id="loadDialog"></div>
+</body>
+</html>

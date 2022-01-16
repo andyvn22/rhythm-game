@@ -1,0 +1,480 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, viewport-fit=cover, minimum-scale=1.0"/>
+	<title>Rhythm Game</title>
+	<link rel="stylesheet" href="include/jquery-ui.css"/>
+	<link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
+</head>
+<body>
+	<style>
+		*,
+		*:before,
+		*:after {
+			-webkit-box-sizing: border-box;
+			-moz-box-sizing: border-box;
+			box-sizing: border-box;
+		}
+		
+		html {
+			min-height: 100%;
+			text-align: center;
+            padding: 0;
+            margin: 0;
+
+			user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+			cursor: default;
+
+            position: relative;
+            z-index: -1000;
+            background-color: black;
+            background-image: url("media/space.jpg");
+        }
+
+        body {
+            padding: 0;
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            font-size: max(min(1em, 1.5vw), 0.7em);
+        }
+
+        div.ui-widget-overlay.ui-front {
+            background: black !important;
+        }
+
+        #requirements, #requirements-disabled {
+            position: absolute;
+            left: 0;
+            top: 0;
+            z-index: -500;
+        }
+
+        /* Too slow. */
+        /*#requirements {
+            filter: drop-shadow(0 0 0.5em rgb(255, 255, 255));
+        }
+
+        #requirements-disabled {
+            filter: drop-shadow(0 0 0.5em rgb(94, 94, 94));
+        }*/
+
+        #skillTree {
+            padding-top: 6vw;
+            max-width: 70em;
+            margin: auto;
+            display: grid;
+            grid-auto-rows: 1fr;
+        }
+
+        .row {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            justify-content: space-evenly;
+            padding-bottom: 6vw;
+        }
+
+        .finishedSkill {
+            color: rgb(145, 122, 76);
+            font-weight: bold;
+        }
+
+        .nextSkillButton, .nextSkillButton:focus {
+            color: rgb(173, 148, 100);
+        }
+
+        .nextSkillButton:hover {
+            color: rgb(233, 206, 156);
+        }
+
+        /**********/
+        /* Skills */
+        /**********/
+
+        .skill, .spacer {
+            width: 7em;
+            height: 6em;
+            margin: 1em;
+        }
+
+        .skill {
+            padding: 1em 0.2em;
+            border-radius: 4px;
+
+            text-align: center;
+            font-weight: bold;
+			text-shadow: -0.1em -0.1em 0.2em white, 0.1em 0.1em 0.2em black;
+
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            cursor: pointer;
+        }
+
+        .skill-open {
+			text-shadow: 0.1em 0.1em 0.2em white, -0.1em -0.1em 0.2em black;
+        }
+
+        .skill-completed {
+            color: #fff1c6;
+            box-shadow: 0em 0em 1em rgba(255, 241, 203, 0.7), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
+            background: linear-gradient(to bottom right, #cfc09f 0%,#ffecb3 25%,#3a2c0f 100%);
+        }
+
+        .skill-completed:hover {
+            background: linear-gradient(to bottom right, #dbcfb5 0%,#fff1c6 25%,#4b3a19 100%);
+        }
+
+        .skill-completed.skill-open, .skill-completed.skill-open:hover {
+            box-shadow: 0em 0em 2em rgba(255, 241, 203, 0.7), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
+            background: linear-gradient(to top left, #cfc09f 0%,#ffecb3 25%,#3a2c0f 100%);
+        }
+
+        @keyframes pulse {
+			from { transform: scale(1.0); }
+			to { transform: scale(1.1); }
+		}
+
+        .skill-current {
+            color: white;
+            box-shadow: 0em 0em 1.5em rgba(255, 255, 255, 1.0), inset 0.2em 0.2em 0.2em rgba(255, 255, 255, 0.6), inset -0.2em -0.2em 0.2em rgba(0, 0, 0, 0.6);
+            background: linear-gradient(to bottom right, #9fa6cf 0%,#080052 100%);
+
+			animation-name: pulse; 
+            animation-duration: 2s; 
+            animation-timing-function: ease-in-out; 
+            animation-direction: alternate; 
+            animation-iteration-count: infinite; 
+            animation-play-state: running;
+        }
+
+        .skill-current:hover {
+            background: linear-gradient(to bottom right, #a8aed4 0%,#13096d 100%);
+        }
+
+        .skill-current.skill-open, .skill-current.skill-open:hover {
+            background: linear-gradient(to top left, #9fa6cf 0%,#080052 100%);
+            box-shadow: 0em 0em 2em rgba(255, 255, 255, 1.0), inset 0.2em 0.2em 0.2em rgba(0, 0, 0, 0.4), inset -0.2em -0.2em 0.2em rgba(255, 255, 255, 0.4);
+        }
+
+        .skill.skill-locked {
+            border: 2px solid rgb(158, 158, 158);
+            color: rgb(184, 184, 184);
+            background: rgb(107, 107, 107);
+            text-shadow: none;
+            box-shadow: 0.4em 0.4em 1.5em rgba(0, 0, 0, 0.3);
+        }
+
+        .skill.skill-undefined {
+            border: 3px dashed red;
+            background: rgb(172, 172, 172);
+            color: red;
+        }
+
+        .skill.skill-undefined::before {
+            content: "🚧 ";
+            white-space: pre;
+        }
+
+        /*****************/
+        /* Skill Details */
+        /*****************/
+
+        .skillDetails {
+            font-size: 0.9em;
+        }
+
+        .ui-tooltip {
+            min-width: 16em;
+        }
+
+        .skillDetails h2 {
+            font-size: 1.4em;
+            font-weight: 200;
+        }
+
+        .skillDetails.skillDetails-locked h2 {
+            color: rgb(156, 156, 156);
+        }
+
+        .skillDetails.skillDetails-completed h2 {
+            color: rgb(145, 122, 76);
+        }
+
+        .skillDetails ol {
+            text-align: left;
+            padding: 0 1.5em 0 3em;
+        }
+
+        .skillDetails a {
+            text-decoration: none;
+        }
+
+        .skillRequirementsList {
+            border: 2px dashed gray;
+            border-radius: 0.4em;
+            padding: 0.3em;
+            font-size: 0.9em;
+        }
+
+        .skillRequirementsList ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        /**************/
+        /* Level List */
+        /**************/
+
+        .level-locked, .level-current, .level-completed {
+            white-space: nowrap;
+        }
+
+        .level-name {
+            white-space: normal;
+        }
+        
+        .level-completed, .level-completed a {
+            color: rgb(145, 122, 76);
+        }
+
+        .level-completed a:hover {
+            color: rgb(209, 188, 119);
+        }
+
+        .level-current, .level-current a {
+            color: rgb(21, 21, 221);
+            font-weight: bold;
+        }
+
+        .level-current a:hover {
+            color: rgb(173, 173, 255);
+        }
+
+        .level-locked {
+            color: rgb(156, 156, 156);
+        }
+
+        /********/
+        /* Help */
+        /********/
+
+        #helpButton {
+            position: fixed;
+            right: 0.6em;
+            top: 0.6em;
+            z-index: 1000;
+
+            font-size: 2em;
+            color: rgb(192, 192, 192);
+            cursor: pointer;
+        }
+
+        #helpButton:hover {
+            color: white;
+        }
+
+        #helpDialog h2 {
+            font-size: 1em;
+        }
+
+        /******************/
+        /* Profile Editor */
+        /******************/
+
+        #profileButton {
+            position: fixed;
+            left: 1em;
+            top: 1em;
+            z-index: 1000;
+        }
+
+        #profileGreeting {
+            font-size: 1.2em;
+        }
+
+        #profileCompletion {
+            font-size: 0.8em;
+            color: rgb(145, 122, 76);
+        }
+
+        fieldset {
+            margin-top: 2em;
+            border-radius: 0.8em;
+        }
+
+        fieldset legend {
+            text-align: left;
+            margin-left: 0.3em;
+        }
+
+        #profileSavedLink {
+            margin-top: 0.5em;
+            width: 100%;
+        }
+
+        #profileSavedLinkLabel {
+            font-size: 0.8em;
+        }
+
+        #profileAddButton {
+            color: rgb(70, 224, 70);
+        }
+
+        #profileDeleteButton {
+            color: rgb(255, 58, 58);
+            margin-bottom: 0.5em;
+        }
+
+        #profileReviveLink {
+            color: rgb(0, 78, 194);
+            font-size: 0.8em;
+        }
+
+        #profileReviveLink:hover {
+            color: rgb(88, 155, 255);
+        }
+    </style>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>
+	<script src="include/jquery-1.12.2.min.js"></script>
+	<script src="include/jquery-ui.min.js"></script>
+	<script src="include/howler.core.js"></script>
+	<script src="music.js"></script>
+	<script src="gameData.js"></script>
+
+	<script src="index.js"></script>
+
+    <button id="profileButton"></button>
+    <span id="helpButton" class="ui-icon ui-icon-help"></span>
+    
+    <div id="skillTree">
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="skill" id="welcome"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="skill" id="halfNotes" data-requirements="welcome"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="skill" id="quarterNotes" data-requirements="halfNotes"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="skill" id="eighthNotes" data-requirements="quarterNotes"></div>
+            <div class="skill" id="topNumber" data-requirements="quarterNotes"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes1" data-requirements="eighthNotes"></div>
+            <div class="skill" id="swing1" data-requirements="eighthNotes"></div>
+            <div class="skill" id="eighthRests" data-requirements="eighthNotes"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="quarterNoteChallenge" data-requirements="topNumber"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes2" data-requirements="sixteenthNotes1"></div>
+            <div class="skill" id="sixteenthNotes3" data-requirements="sixteenthNotes1"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="swing2" data-requirements="swing1 eighthRests"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="dots" data-requirements="eighthRests topNumber"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes4" data-requirements="sixteenthNotes2 sixteenthNotes3"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="syncopation" data-requirements="dots"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="eighthNoteChallenge" data-requirements="dots"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNotes5" data-requirements="sixteenthNotes4 dots"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="swing3" data-requirements="swing2 syncopation"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="syncopation2" data-requirements="syncopation"></div>
+            <div class="skill" id="bottomNumber" data-requirements="dots"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="cutTime" data-requirements="bottomNumber"></div>
+            <div class="skill" id="compoundTime1" data-requirements="bottomNumber"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="threeFour" data-requirements="dots"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="sixteenthNoteChallenge" data-requirements="sixteenthNotes5"></div>
+            <div class="skill" id="syncopation3" data-requirements="sixteenthNotes5 syncopation"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="cutTime2" data-requirements="cutTime sixteenthNotes5"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="compoundTime3" data-requirements="compoundTime1"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="skill" id="syncopation4" data-requirements="syncopation2 syncopation3"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="compoundTime2" data-requirements="compoundTime1"></div>
+            <div class="skill" id="nineEight" data-requirements="compoundTime1"></div>
+            <div class="skill" id="compoundTime4" data-requirements="compoundTime3"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="syncopationChallenge" data-requirements="syncopation4"></div>
+            <div class="skill" id="cutTime3" data-requirements="cutTime2 syncopation4"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="spacer"></div>
+            <div class="skill" id="compoundSingle" data-requirements="nineEight compoundTime4 threeFour"></div>
+            <div class="skill" id="fiveFour" data-requirements="threeFour"></div>
+        </div>
+        <div class="row">
+            <div class="spacer"></div>
+            <div class="skill" id="compoundTime5" data-requirements="compoundSingle compoundTime2 syncopation4"></div>
+            <div class="spacer"></div>
+        </div>
+        <div class="row">
+            <div class="skill" id="everythingChallenge" data-requirements="cutTime3 fiveFour compoundTime5"></div>
+        </div>
+    </div>
+
+    <div id="profileDialog"></div>
+    <div id="helpDialog">
+        <h2>What is this?</h2>
+        <p>This is the Rhythm Game! Play it and you'll accidentally learn how to read music! Real sheet music!</p>
+        <h2>How do I play?</h2>
+        <p>Each time you get 100% on a level, you'll unlock more levels! Click one of the blue skill boxes to get started. It's all about timing, so you can't play with wireless headphones&mdash;use your built-in speakers, or some good old-fashioned things with cords!</p>
+        <h2>How do I save?</h2>
+        <p>Your progress is automatically saved in your browser. Yay, automatic-ness! However, this does mean that if you switch browsers or devices, you need to get a special link from the button at the top-left.</p>
+        <h2>Who made this?</h2>
+        <p><a href="https://andyvn.ath.cx/">Andy Van Ness</a> made this. He's a band teacher at Linden Avenue Middle School in Red Hook, New York. Don't worry, he's not really as crazy as the narrator of this game is.</p>
+        <h2>Can I see the code?</h2>
+        <p>Sure! <a href="https://github.com/andyvn22/rhythm-game">Here's the GitHub repository.</a> By the way, this work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.</p>
+        <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a>
+    </div>
+</body>
+</html>

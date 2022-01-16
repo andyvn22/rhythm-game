@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, viewport-fit=cover"/>
+	<title>Rhythm Game</title>
+	<link rel="stylesheet" href="include/jquery-ui.css"/>
+	<link rel="stylesheet" href="include/jquery-ui-1.12.icon-font.min.css"/>
+	<link rel="stylesheet" href="level.css"/>
+</head>
+<body>
+	<style>
+		#staff {
+			font-family: "Notation";
+			font-size: 12vw;
+			padding-right: 100%;
+			padding-top: 3vw;
+			padding-bottom: 4vw;
+			overflow-x: scroll;
+			overflow-y: hidden;
+			white-space: nowrap;
+			position: relative;
+		}
+
+		/* IE hack */
+		@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+			.ie-padding-hack {
+				width: 7em;
+				display: inline-block;
+				height: 1em;
+			}
+		}
+
+		.note {
+			position: relative;
+			top: 0.3em;
+		}
+		
+		.extraClap, .extraTap {
+			position: absolute;
+			font-size: 0.1em;
+			font-family: Helvetica, sans-serif;
+			color: hsl(0,80%,40%);
+			text-align: center;
+		}
+		
+		.counting {
+			position: absolute;
+			font-size: 0.2em;
+			font-family: Helvetica, sans-serif;
+			text-align: center;
+		}
+
+		#buttons {
+			font-size: 1.5em;
+			touch-action: manipulation;
+		}
+
+		/* default to landscape */
+		#buttons .ui-button {
+			width: 30%;
+			max-width: 10em;
+			height: 4em;
+			border-radius: 1em;
+		}
+
+		@media screen and (orientation: portrait) {
+			#buttons .ui-button {
+				width: 90%;
+				margin: 0.25em;
+			}
+
+			#buttons {
+				white-space: pre-line;
+			}
+
+			#buttons .ui-button::after {
+				content: "\A";
+			}
+		}
+
+		@keyframes pulse {
+			from { transform: scale(1.0); }
+			to { transform: scale(1.2); }
+		}
+
+		.introduce {
+			animation-name: pulse; 
+            animation-duration: 1s; 
+            animation-timing-function: ease-in-out; 
+            animation-direction: alternate; 
+            animation-iteration-count: 2; 
+            animation-play-state: running;
+		}
+
+		.require {
+			animation-name: pulse; 
+            animation-duration: 2.0s; 
+            animation-timing-function: ease-in-out; 
+            animation-direction: alternate; 
+            animation-iteration-count: infinite; 
+            animation-play-state: running; 
+		}
+
+		/*****************/
+		/* Grade Summary */
+		/*****************/
+
+		#gradeSummary dl dt {
+			font-weight: 200;
+			margin-bottom: 2em;
+			display: block; /* for IE */
+		}
+
+		#gradeSummary dl dd {
+			margin: 0 0.2em;
+			font-size: 9vmin;
+			font-weight: 600;
+
+			text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
+			display: block; /* for IE */
+		}
+
+		.tendency-value {
+			text-align: right;
+		}
+
+		#gradeSummary dl {
+			display: grid;
+			display: -ms-grid;
+		}
+
+		#gradeSummary dl dd.tendency-perfect {
+			margin: auto 0.3em;
+			font-size: 6vmin;
+		}
+
+		#gradeSummary dl dd.tendency-text {
+			margin-top: auto;
+			margin-bottom: auto;
+			margin-left: 0;
+			margin-right: 0.6em;
+			font-size: 3.5vmin;
+
+			text-align: left;
+		}
+
+		.star-enabled, .star-disabled {
+			text-shadow:  0 0 0.1em white, 0.05em 0.05em 0.05em black;
+			font-size: 0.7em;
+			position: relative;
+			top: -0.2em;
+		}
+
+		.star-enabled {
+			color: rgb(238, 205, 15);
+		}
+
+		.star-disabled {
+			color: rgb(179, 179, 179);
+		}
+	</style>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=URLSearchParams"></script>
+	<script src="include/jquery-1.12.2.min.js"></script>
+	<script src="include/jquery-ui.min.js"></script>
+	<script src="include/howler.core.js"></script>
+	<script src="music.js"></script>
+	<script src="gameData.js"></script>
+
+	<script src="piece.js"></script>
+	
+	<div id="staff"></div>
+
+	<div id="buttons">
+		<button id="play"></button>
+		<button id="tap"></button>
+		<button id="clap"></button>
+	</div>
+</body>
+</html>
